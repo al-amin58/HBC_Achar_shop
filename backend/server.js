@@ -4,6 +4,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import connectDB from './config/db.js';
 import authRoutes from './routes/authRoutes.js';
+import adminAuthRoutes from './routes/adminAuthRoute.js';
 
 dotenv.config();
 
@@ -20,11 +21,9 @@ app.use(helmet());
 
 
 // all routes related to authentication will be prefixed with  
+app.use('/api/auth/admin', adminAuthRoutes);
 app.use('/api/auth', authRoutes);  
 
-// app.get('/', (req, res) => {
-//     res.send('Hello World!');
-// });
 
 connectDB();
 

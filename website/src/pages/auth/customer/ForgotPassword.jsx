@@ -70,7 +70,7 @@ export default function ForgotPassword() {
   /* ── Step 2: verify OTP ── */
   const handleVerifyOtp = async () => {
     if (otpExpired) { toast.error('OTP has expired. Please request a new one.'); return; }
-    if (!/^\d{4}$/.test(otp)) { toast.error('Please enter a valid 4-digit OTP.'); return; }
+    if (!/^[A-Z0-9]{9}$/.test(otp)) { toast.error('Please enter a valid 9-character OTP.'); return; }
     setLoading(true);
     try {
       await api.post('/auth/forgot-password/verify-otp', { phonenumber: phone, otp });
@@ -275,20 +275,21 @@ export default function ForgotPassword() {
                     </svg>
                   </span>
                   <input
-                    type="number"
+                    type="text"
                     value={otp}
                     onChange={e => {
-                      const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+                      const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 9);
                       setOtp(val);
                     }}
-                    placeholder="Enter 4-digit OTP"
+                    placeholder="Enter 9-character OTP"
                     className="w-full pl-10 pr-4 py-3 rounded-xl text-sm outline-none transition-all duration-200"
                     style={{ ...inputStyle, letterSpacing: '0.3em', fontSize: '16px' }}
                     onFocus={inputFocus}
                     onBlur={inputBlur}
-                    maxLength={4}
+                    maxLength={9}
                     inputMode="numeric"
                     pattern="\d{4}"
+                    
                   />
                 </div>
 
@@ -305,7 +306,7 @@ export default function ForgotPassword() {
                   )}
                 </div>
                 <p className="text-xs text-center mt-1" style={{ color: '#7aab90' }}>
-                  A 4-digit OTP has been generated and saved. Only numbers allowed.
+                  A 9-character OTP has been generated and saved. Only alphanumeric characters allowed.
                 </p>
               </div>
 

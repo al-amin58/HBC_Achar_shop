@@ -111,8 +111,14 @@ export const logoutUser = (req, res) => {
 // forget password, reset password, etc. can be added here in the future
 
 /*  generate 4-digit OTP */
-const generateOtp = () =>
-  Math.floor(1000 + Math.random() * 9000).toString();
+const generateOtp = () => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let otp = '';
+  for (let i = 0; i < 9; i++) {
+    otp += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return otp;
+};
 
 /* STEP 1 — POST /auth/forgot-password/send-otp*/
 export const sendOtp = async (req, res) => {
@@ -176,7 +182,7 @@ export const verifyOtp = async (req, res) => {
     }
 
     // ৩. OTP match check
-    if (user.resetOtp !== otp.toString()) {
+    if (user.resetOtp !== otp.toString().toUpperCase()) {
       return res.status(400).json({ message: 'Invalid OTP.' });
     }
 
@@ -217,7 +223,7 @@ export const resetPassword = async (req, res) => {
       return res.status(400).json({ message: 'OTP expired. Please start again.' });
     }
 
-    if (user.resetOtp !== otp.toString()) {
+    if (user.resetOtp !== otp.toString().toUpperCase()) {
       return res.status(400).json({ message: 'Invalid OTP.' });
     }
 
