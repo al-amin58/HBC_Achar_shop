@@ -9,14 +9,13 @@ import {
   MapPin, 
   Phone, 
   Calendar, 
-  ChevronRight, 
   Box, 
   Home,
   CreditCard,
   Printer,
   RotateCcw,
   Star,
-  MessageCircle   // ← ADDED: Missing import
+  MessageCircle
 } from 'lucide-react';
 
 // ─── Mock Order Data ────────────────────────────────────────
@@ -105,7 +104,7 @@ const statusConfig = {
 };
 
 // ─── Helper: Timeline Step ──────────────────────────────────
-const TimelineStep = ({ step, index, isLast }) => {
+const TimelineStep = ({ step, isLast }) => {
   const Icon = step.icon;
   return (
     <div className="relative flex gap-4">
@@ -282,7 +281,6 @@ const TrackOrder = () => {
                       <TimelineStep 
                         key={idx} 
                         step={step} 
-                        index={idx} 
                         isLast={idx === order.timeline.length - 1} 
                       />
                     ))}

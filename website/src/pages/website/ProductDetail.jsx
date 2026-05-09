@@ -1,5 +1,5 @@
 // pages/ProductDetail.jsx
-import React, { useState, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { 
   Star, 
   ShoppingCart, 
@@ -16,7 +16,6 @@ import {
   Minus,
   Plus,
   HelpCircle,
-  MessageCircle,
   Store
 } from 'lucide-react';
 
@@ -146,7 +145,7 @@ const ProductDetail = () => {
   const [selectedSize, setSelectedSize] = useState('500g');
   const [selectedSpicy, setSelectedSpicy] = useState('Medium');
   const [quantity, setQuantity] = useState(1);
-  const [activeTab, setActiveTab] = useState('details');
+  const activeTab = 'details';
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [isZoomed, setIsZoomed] = useState(false);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });

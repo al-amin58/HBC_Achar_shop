@@ -1,22 +1,38 @@
 import { useState, useEffect } from 'react';
 
+const SECTION_IDS = [
+  'acceptance',
+  'products',
+  'pricing',
+  'shipping',
+  'cancellation',
+  'returns',
+  'accounts',
+  'safety',
+  'property',
+  'liability',
+  'law',
+  'changes',
+  'contact',
+];
+
 const TermsAndConditions = () => {
   const [activeSection, setActiveSection] = useState('acceptance');
 
   // Scroll spy to update active section
   useEffect(() => {
     const handleScroll = () => {
-      const sections = sectionIds.map(id => document.getElementById(id));
+      const sections = SECTION_IDS.map((id) => document.getElementById(id));
       const scrollPos = window.scrollY + 150;
-      
+
       for (let i = sections.length - 1; i >= 0; i--) {
         if (sections[i] && sections[i].offsetTop <= scrollPos) {
-          setActiveSection(sectionIds[i]);
+          setActiveSection(SECTION_IDS[i]);
           break;
         }
       }
     };
-    
+
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
@@ -28,22 +44,6 @@ const TermsAndConditions = () => {
       setActiveSection(id);
     }
   };
-
-  const sectionIds = [
-    'acceptance',
-    'products',
-    'pricing',
-    'shipping',
-    'cancellation',
-    'returns',
-    'accounts',
-    'safety',
-    'property',
-    'liability',
-    'law',
-    'changes',
-    'contact'
-  ];
 
   const navItems = [
     { id: 'acceptance', label: 'Acceptance of Terms', icon: '✅' },

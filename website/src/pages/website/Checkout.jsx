@@ -1,10 +1,9 @@
 // CheckoutPage.jsx
-import React, { useState } from 'react';
+import  { useState } from 'react';
+import { useNavigate  } from 'react-router';
 import { 
   ChevronRight, 
   ChevronLeft, 
-  MapPin, 
-  CreditCard, 
   Wallet, 
   Banknote, 
   Smartphone,
@@ -15,8 +14,14 @@ import {
   Truck,
   Gift,
   X,
-  ArrowDownLeft,    
-  ArrowUpRight
+  Coins,
+  Plus,
+  Minus,
+  Sparkles,
+  RotateCcw,
+  ArrowLeft,
+  
+
 } from 'lucide-react';
 
 // ─── Demo Data ──────────────────────────────────────────────
@@ -56,10 +61,7 @@ const coupons = {
   'FLASH25': { type: 'percentage', value: 25, maxDiscount: 200 }
 };
 
-const shippingRates = {
-  insideDhaka: 60,
-  outsideDhaka: 120
-};
+
 
 // ─── Division → District → Thana Data ───────────────────────
 const locationData = {
@@ -122,7 +124,7 @@ const WalletModal = ({ isOpen, onClose, balance }) => {
   const totalDelivered = walletHistory
     .filter(t => t.type === 'credit' && t.status === 'completed')
     .reduce((sum, t) => sum + t.amount, 0);
-  
+
   const totalPending = walletHistory
     .filter(t => t.status === 'pending')
     .reduce((sum, t) => sum + (t.type === 'debit' ? t.amount : 0), 0);
@@ -136,9 +138,9 @@ const WalletModal = ({ isOpen, onClose, balance }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      
+
       <div className="relative bg-gray-900 rounded-3xl max-w-md w-full max-h-[90vh] overflow-y-auto animate-scale-in">
-        
+
         {/* Header */}
         <div className="sticky top-0 bg-gray-900 z-10 p-4 border-b border-gray-800 flex items-center justify-between">
           <h3 className="text-white font-bold text-lg">My Wallet</h3>
@@ -151,11 +153,11 @@ const WalletModal = ({ isOpen, onClose, balance }) => {
         </div>
 
         {/* Balance Card */}
-        <div className="bg-gradient-to-br from-emerald-700 via-teal-700 to-emerald-800 p-8 text-center mx-4 mt-4 rounded-2xl">
+        <div className="bg-linear-to-br from-emerald-700 via-teal-700 to-emerald-800 p-8 text-center mx-4 mt-4 rounded-2xl">
           <p className="text-emerald-200 text-sm mb-2 font-medium">Available Balance</p>
           <p className="text-5xl font-bold text-white mb-2">৳{balance}</p>
           <p className="text-emerald-200 text-xs">You can request payment for this Amount</p>
-          
+
           {/* Quick Stats */}
           <div className="grid grid-cols-2 gap-3 mt-6">
             <div className="bg-white/10 backdrop-blur rounded-lg p-3">
@@ -172,28 +174,28 @@ const WalletModal = ({ isOpen, onClose, balance }) => {
         {/* Balance Summary */}
         <div className="p-6 space-y-4">
           <h4 className="text-white font-semibold text-sm uppercase tracking-wider">Balance Summary</h4>
-          
+
           <div className="space-y-3">
             <div className="flex justify-between items-center py-2 border-b border-gray-800">
               <span className="text-gray-400 text-sm">Amount Delivered</span>
               <span className="text-emerald-400 font-medium">৳{totalDelivered}</span>
             </div>
-            
+
             <div className="flex justify-between items-center py-2 border-b border-gray-800">
               <span className="text-gray-400 text-sm">Payable Delivery Charge</span>
               <span className="text-amber-400 font-medium">৳{totalPending > 0 ? 85 : 0}</span>
             </div>
-            
+
             <div className="flex justify-between items-center py-2 border-b border-gray-800">
               <span className="text-gray-400 text-sm">Sub-Total</span>
               <span className="text-white font-medium">৳{subTotal}</span>
             </div>
-            
+
             <div className="flex justify-between items-center py-2 border-b border-gray-800">
               <span className="text-gray-400 text-sm">COD Charge (2%)</span>
               <span className="text-red-400 font-medium">-৳{Math.round(codCharges)}</span>
             </div>
-            
+
             <div className="flex justify-between items-center py-3 border-t-2 border-dashed border-gray-700">
               <span className="text-white font-bold">Total Clearable</span>
               <span className="text-emerald-400 font-bold text-xl">৳{balance}</span>
@@ -207,7 +209,7 @@ const WalletModal = ({ isOpen, onClose, balance }) => {
           </div>
         </div>
 
-      
+
 
         {/* Payment Request Button */}
         <div className="sticky bottom-0 bg-gray-900 p-4 border-t border-gray-800">
@@ -215,7 +217,7 @@ const WalletModal = ({ isOpen, onClose, balance }) => {
             disabled={balance <= 0}
             className={`w-full py-3.5 rounded-xl font-bold text-lg transition-all ${
               balance > 0
-                ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:shadow-lg hover:shadow-emerald-500/25'
+                ? 'bg-linear-to-r from-emerald-500 to-teal-500 text-white hover:shadow-lg hover:shadow-emerald-500/25'
                 : 'bg-gray-700 text-gray-500 cursor-not-allowed'
             }`}
           >
@@ -224,6 +226,231 @@ const WalletModal = ({ isOpen, onClose, balance }) => {
           <p className="text-center text-gray-600 text-xs mt-2">
             Minimum withdraw amount: ৳200
           </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Coin Modal Component ───────────────────────────────────
+const CoinModal = ({ isOpen, onClose, userCoins, onApplyCoins, maxUsableCoins }) => {
+  const [coinAmount, setCoinAmount] = useState(0);
+  const [coinError, setCoinError] = useState('');
+
+  if (!isOpen) return null;
+
+  const takaValue = (coinAmount / 100).toFixed(2);
+  const maxTaka = (maxUsableCoins / 100).toFixed(2);
+
+  const handleIncrement = () => {
+    if (coinAmount + 100 <= Math.min(userCoins, maxUsableCoins)) {
+      setCoinAmount(prev => prev + 100);
+      setCoinError('');
+    }
+  };
+
+  const handleDecrement = () => {
+    if (coinAmount >= 100) {
+      setCoinAmount(prev => prev - 100);
+      setCoinError('');
+    }
+  };
+
+  const handleInputChange = (e) => {
+    const value = parseInt(e.target.value) || 0;
+    // Round to nearest 100
+    const rounded = Math.floor(value / 100) * 100;
+
+    if (rounded > userCoins) {
+      setCoinError(`আপনার কাছে সর্বোচ্চ ${userCoins} কয়েন আছে`);
+      setCoinAmount(userCoins);
+    } else if (rounded > maxUsableCoins) {
+      setCoinError(`এই অর্ডারে সর্বোচ্চ ${maxUsableCoins} কয়েন ব্যবহার করা যাবে`);
+      setCoinAmount(maxUsableCoins);
+    } else {
+      setCoinError('');
+      setCoinAmount(rounded);
+    }
+  };
+
+  const handleApply = () => {
+    if (coinAmount < 100) {
+      setCoinError('কমপক্ষে 100 কয়েন ব্যবহার করতে হবে');
+      return;
+    }
+    if (coinAmount > userCoins) {
+      setCoinError('যথেষ্ট কয়েন নেই');
+      return;
+    }
+    onApplyCoins(coinAmount);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+
+      <div className="relative bg-white rounded-3xl max-w-md w-full animate-scale-in shadow-2xl">
+
+        {/* Header */}
+        <div className="sticky top-0 bg-white z-10 p-4 border-b border-orange-100 flex items-center justify-between rounded-t-3xl">
+          <div className="flex items-center gap-2">
+            <div className="w-10 h-10 rounded-full bg-linear-to-br from-amber-400 to-orange-500 flex items-center justify-center">
+              <Coins className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h3 className="text-gray-800 font-bold text-lg">কয়েন ব্যবহার করুন</h3>
+              <p className="text-xs text-gray-500">100 কয়েন = ৳1</p>
+            </div>
+          </div>
+          <button 
+            onClick={onClose}
+            className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-200 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-6">
+
+          {/* User Coin Balance */}
+          <div className="bg-linear-to-r from-amber-50 to-orange-50 rounded-xl p-4 border border-amber-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-amber-500" />
+                <span className="text-gray-700 font-medium">আপনার কয়েন</span>
+              </div>
+              <span className="text-2xl font-bold text-amber-600">{userCoins.toLocaleString()}</span>
+            </div>
+            <p className="text-xs text-gray-500 mt-1 text-right">সমান ৳{(userCoins / 100).toFixed(2)}</p>
+          </div>
+
+          {/* Coin Input Section */}
+          <div className="space-y-4">
+            <label className="block text-sm font-medium text-gray-700">
+              কত কয়েন ব্যবহার করতে চান?
+            </label>
+
+            {/* Quick Select Buttons */}
+            <div className="flex gap-2 flex-wrap">
+              {[100, 200, 500, 1000].map(amount => (
+                <button
+                  key={amount}
+                  onClick={() => {
+                    if (amount <= userCoins && amount <= maxUsableCoins) {
+                      setCoinAmount(amount);
+                      setCoinError('');
+                    }
+                  }}
+                  disabled={amount > userCoins || amount > maxUsableCoins}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                    coinAmount === amount
+                      ? 'bg-amber-500 text-white shadow-md'
+                      : amount > userCoins || amount > maxUsableCoins
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'
+                  }`}
+                >
+                  {amount}
+                </button>
+              ))}
+              <button
+                onClick={() => {
+                  const max = Math.min(userCoins, maxUsableCoins);
+                  setCoinAmount(max);
+                  setCoinError('');
+                }}
+                disabled={userCoins < 100}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                  coinAmount === Math.min(userCoins, maxUsableCoins)
+                    ? 'bg-amber-500 text-white shadow-md'
+                    : userCoins < 100
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100'
+                }`}
+              >
+                সর্বোচ্চ
+              </button>
+            </div>
+
+            {/* Manual Input with +/- */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleDecrement}
+                disabled={coinAmount < 100}
+                className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center text-gray-600 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <Minus className="w-4 h-4" />
+              </button>
+
+              <div className="flex-1 relative">
+                <input
+                  type="number"
+                  value={coinAmount || ''}
+                  onChange={handleInputChange}
+                  placeholder="0"
+                  className="w-full px-4 py-3 text-center text-lg font-bold border-2 border-orange-200 rounded-xl focus:ring-2 focus:ring-orange-300 focus:border-orange-400 outline-none"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">কয়েন</span>
+              </div>
+
+              <button
+                onClick={handleIncrement}
+                disabled={coinAmount + 100 > Math.min(userCoins, maxUsableCoins)}
+                className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center text-gray-600 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+
+            {coinError && (
+              <p className="text-sm text-red-500 flex items-center gap-1">
+                <AlertCircle className="w-4 h-4" /> {coinError}
+              </p>
+            )}
+          </div>
+
+          {/* Conversion Display */}
+          <div className="bg-gray-50 rounded-xl p-4 space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-600">কয়েন</span>
+              <span className="font-medium text-gray-800">{coinAmount.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-600">রূপান্তর হার</span>
+              <span className="font-medium text-gray-800">100 = ৳1</span>
+            </div>
+            <div className="border-t border-gray-200 pt-2 flex justify-between items-center">
+              <span className="text-gray-700 font-medium">ছাড়ের পরিমাণ</span>
+              <span className="text-2xl font-bold text-amber-600">৳{takaValue}</span>
+            </div>
+          </div>
+
+          {/* Max Usage Info */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-700">
+            <p>এই অর্ডারে সর্বোচ্চ {maxUsableCoins.toLocaleString()} কয়েন ব্যবহার করা যাবে (৳{maxTaka})</p>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="sticky bottom-0 bg-white p-4 border-t border-gray-100 rounded-b-3xl space-y-2">
+          <button 
+            onClick={handleApply}
+            disabled={coinAmount < 100 || coinAmount > userCoins}
+            className={`w-full py-3.5 rounded-xl font-bold text-lg transition-all ${
+              coinAmount >= 100 && coinAmount <= userCoins
+                ? 'bg-linear-to-r from-amber-500 to-orange-500 text-white hover:shadow-lg hover:shadow-amber-500/25 active:scale-[0.98]'
+                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+            }`}
+          >
+            কয়েন অ্যাপ্লাই করুন (৳{takaValue})
+          </button>
+          <button 
+            onClick={onClose}
+            className="w-full py-2 text-gray-500 text-sm hover:text-gray-700 transition-colors"
+          >
+            বাতিল করুন
+          </button>
         </div>
       </div>
     </div>
@@ -280,7 +507,9 @@ const SelectField = ({ label, required, options, value, onChange, placeholder, d
 // ─── Main Component ─────────────────────────────────────────
 export default function CheckoutPage() {
   const [step, setStep] = useState(1); // 1 = Customer Info, 2 = Payment
-  
+const navigate = useNavigate();
+
+
   // Form States
   const [formData, setFormData] = useState({
     fullName: '',
@@ -294,7 +523,7 @@ export default function CheckoutPage() {
   });
 
   const [formErrors, setFormErrors] = useState({});
-  const [shippingMethod, setShippingMethod] = useState('insideDhaka');
+
   const [paymentMethod, setPaymentMethod] = useState('cod');
   const [couponCode, setCouponCode] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState(null);
@@ -302,14 +531,19 @@ export default function CheckoutPage() {
   const [orderNote, setOrderNote] = useState('');
   const [useWallet, setUseWallet] = useState(false);
   const [showWalletModal, setShowWalletModal] = useState(false);
-  
+
+  // ─── Coin States ─────────────────────────────────────────
+  const [showCoinModal, setShowCoinModal] = useState(false);
+  const [appliedCoins, setAppliedCoins] = useState(0); // Number of coins applied
+  const [userCoinBalance] = useState(2500); // Demo: User has 2500 coins
+
   // Demo wallet balance
   const walletBalance = 500;
 
   // Calculations
   const subtotal = demoCartItems.reduce((sum, item) => sum + (item.price * item.qty), 0);
-  const deliveryCharge = shippingRates[shippingMethod];
-  
+  const deliveryCharge = 85;
+
   const calculateDiscount = () => {
     if (!appliedCoupon) return 0;
     if (appliedCoupon.type === 'percentage') {
@@ -320,8 +554,9 @@ export default function CheckoutPage() {
   };
 
   const discount = calculateDiscount();
-  const totalBeforeWallet = subtotal + deliveryCharge - discount;
-  
+  const coinDiscount = appliedCoins / 100; // 100 coins = 1 taka
+  const totalBeforeWallet = subtotal + deliveryCharge - discount - coinDiscount;
+
   // Wallet logic: min order 100, delivery charge always paid by customer
   const canUseWallet = totalBeforeWallet >= 100;
   const walletDeduction = useWallet && canUseWallet 
@@ -329,9 +564,15 @@ export default function CheckoutPage() {
     : 0;
   const finalTotal = totalBeforeWallet - walletDeduction;
 
+  // Max coins usable (cannot exceed 50% of subtotal, and must have enough coins)
+  const maxUsableCoins = Math.min(
+    userCoinBalance,
+    Math.floor((subtotal - discount) * 50 / 100) * 100 // 50% of (subtotal - coupon discount), rounded to 100
+  );
+
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
-    
+
     // Phone validation: only 11 digits
     if (name === 'phone') {
       const digitsOnly = value.replace(/\D/g, '').slice(0, 11);
@@ -364,7 +605,7 @@ export default function CheckoutPage() {
     if (!formData.district) errors.district = 'জেলা নির্বাচন করুন';
     if (!formData.thana) errors.thana = 'থানা নির্বাচন করুন';
     if (!formData.address.trim()) errors.address = 'ঠিকানা প্রয়োজন';
-    
+
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -402,13 +643,21 @@ export default function CheckoutPage() {
     setCouponError('');
   };
 
+  const handleApplyCoins = (coins) => {
+    setAppliedCoins(coins);
+  };
+
+  const removeCoins = () => {
+    setAppliedCoins(0);
+  };
+
   const handlePlaceOrder = () => {
     alert('অর্ডার সফলভাবে সম্পন্ন হয়েছে! 🎉');
   };
 
   // Get districts based on division
   const availableDistricts = formData.division ? Object.keys(locationData[formData.division] || {}) : [];
-  
+
   // Get thanas based on district
   const availableThanas = formData.district && formData.division 
     ? locationData[formData.division][formData.district] || [] 
@@ -421,14 +670,14 @@ export default function CheckoutPage() {
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-400 to-green-400 flex items-center justify-center text-white font-bold text-lg">
-                🥭
+              <div className="w-10 h-10 rounded-full bg-linear-to-br from-orange-400 to-green-400 flex items-center justify-center text-white font-bold text-lg">
+                
               </div>
               <div>
                 <h1 className="text-xl font-bold text-gray-800">চেকআউট</h1>
               </div>
             </div>
-            
+
             {/* Step Indicator */}
             <div className="flex items-center gap-2 text-sm">
               <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${
@@ -446,10 +695,12 @@ export default function CheckoutPage() {
               </div>
             </div>
 
+            
+
             {/* My Wallet Button */}
             <button
               onClick={() => setShowWalletModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl text-sm font-medium hover:shadow-lg transition-all"
+              className="flex items-center gap-2 px-4 py-2 bg-linear-to-r from-emerald-500 to-teal-500 text-white rounded-xl text-sm font-medium hover:shadow-lg transition-all"
             >
               <Wallet className="w-4 h-4" />
               <span className="hidden sm:inline">My Wallet</span>
@@ -460,19 +711,27 @@ export default function CheckoutPage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-8">
+        <button
+            onClick={() => navigate("/cart")}
+          className="px-6 py-2.5 mb-5 flex  bg-linear-to-r from-orange-400 to-orange-500 text-white font-semibold rounded-lg hover:from-orange-500 hover:to-orange-600 transition-all shadow-md"
+        >
+          <ArrowLeft/>
+           Back to Cart
+        </button>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          
+
           {/* Left Column */}
           <div className="lg:col-span-2 space-y-6">
-            
+
             {/* ═══════════════════════════════════════════════════ */}
             {/* STEP 1: Customer Information                      */}
             {/* ═══════════════════════════════════════════════════ */}
             {step === 1 && (
               <>
                 <div className="bg-white/90 backdrop-blur rounded-2xl shadow-sm border border-orange-100 p-6">
+                 
                   <div className="flex items-center gap-2 mb-6">
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-400 to-orange-500 text-white flex items-center justify-center text-sm font-bold">1</div>
+                    <div className="w-8 h-8 rounded-lg bg-linear-to-br from-orange-400 to-orange-500 text-white flex items-center justify-center text-sm font-bold">1</div>
                     <h2 className="text-lg font-bold text-gray-800">গ্রাহকের তথ্য</h2>
                   </div>
 
@@ -504,7 +763,7 @@ export default function CheckoutPage() {
                       placeholder="example@email.com"
                       type="email"
                     />
-                    
+
                     {/* Division Select */}
                     <SelectField
                       label="বিভাগ"
@@ -516,7 +775,7 @@ export default function CheckoutPage() {
                       placeholder="বিভাগ নির্বাচন করুন"
                       error={formErrors.division}
                     />
-                    
+
                     {/* District Select */}
                     <SelectField
                       label="জেলা"
@@ -529,7 +788,7 @@ export default function CheckoutPage() {
                       disabled={!formData.division}
                       error={formErrors.district}
                     />
-                    
+
                     {/* Thana Select */}
                     <SelectField
                       label="থানা / উপজেলা"
@@ -542,7 +801,7 @@ export default function CheckoutPage() {
                       disabled={!formData.district}
                       error={formErrors.thana}
                     />
-                    
+
                     {/* Address Input */}
                     <div className="md:col-span-2">
                       <InputField
@@ -570,57 +829,30 @@ export default function CheckoutPage() {
                   </div>
                 </div>
 
+
                 {/* Shipping Method */}
                 <div className="bg-white/90 backdrop-blur rounded-2xl shadow-sm border border-orange-100 p-6">
                   <div className="flex items-center gap-2 mb-6">
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-400 to-orange-500 text-white flex items-center justify-center text-sm font-bold">2</div>
-                    <h2 className="text-lg font-bold text-gray-800">শিপিং পদ্ধতি</h2>
+                    <div className="w-8 h-8 rounded-lg bg-linear-to-br from-orange-400 to-orange-500 text-white flex items-center justify-center text-sm font-bold">2</div>
+                    <h2 className="text-lg font-bold text-gray-800">শিপিং চার্জ</h2>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <button
-                      onClick={() => setShippingMethod('insideDhaka')}
-                      className={`relative p-4 rounded-xl border-2 text-left transition-all ${
-                        shippingMethod === 'insideDhaka'
-                          ? 'border-orange-400 bg-orange-50 shadow-md'
-                          : 'border-gray-200 hover:border-orange-200 bg-white'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-semibold text-gray-800">ঢাকার ভিতরে</span>
-                        <span className="text-lg font-bold text-orange-600">৳{shippingRates.insideDhaka}</span>
-                      </div>
-                      <p className="text-sm text-gray-500">ডেলিভারি সময়: ১-২ দিন</p>
-                      {shippingMethod === 'insideDhaka' && (
-                        <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-orange-500 text-white flex items-center justify-center text-xs">✓</div>
-                      )}
-                    </button>
+                  <div className="relative p-4 rounded-xl border-2 border-green-400 bg-green-50 shadow-sm">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-semibold text-gray-800">সারাদেশ ডেলিভারি চার্জ</span>
+                      <span className="text-lg font-bold text-green-600">৳85</span>
+                    </div>
+                    <p className="text-sm text-gray-500">ডেলিভারি সময়: ৩৩ থেকে ৭২ ঘন্টা</p>
 
-                    <button
-                      onClick={() => setShippingMethod('outsideDhaka')}
-                      className={`relative p-4 rounded-xl border-2 text-left transition-all ${
-                        shippingMethod === 'outsideDhaka'
-                          ? 'border-green-400 bg-green-50 shadow-md'
-                          : 'border-gray-200 hover:border-green-200 bg-white'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-semibold text-gray-800">ঢাকার বাইরে</span>
-                        <span className="text-lg font-bold text-green-600">৳{shippingRates.outsideDhaka}</span>
-                      </div>
-                      <p className="text-sm text-gray-500">ডেলিভারি সময়: ২-৪ দিন</p>
-                      {shippingMethod === 'outsideDhaka' && (
-                        <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-green-500 text-white flex items-center justify-center text-xs">✓</div>
-                      )}
-                    </button>
+
                   </div>
                 </div>
 
                 {/* Coupon / Voucher */}
                 <div className="bg-white/90 backdrop-blur rounded-2xl shadow-sm border border-orange-100 p-6">
                   <div className="flex items-center gap-2 mb-6">
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-400 to-orange-500 text-white flex items-center justify-center text-sm font-bold">3</div>
-                    <h2 className="text-lg font-bold text-gray-800">কুপন / প্রোমো কোড / ভাউচার</h2>
+                    <div className="w-8 h-8 rounded-lg bg-linear-to-br from-orange-400 to-orange-500 text-white flex items-center justify-center text-sm font-bold">3</div>
+                    <h2 className="text-lg font-bold text-gray-800">কুপন</h2>
                   </div>
 
                   <div className="flex gap-3">
@@ -633,7 +865,7 @@ export default function CheckoutPage() {
                     />
                     <button
                       onClick={applyCoupon}
-                      className="px-6 py-2.5 bg-gradient-to-r from-orange-400 to-orange-500 text-white font-semibold rounded-lg hover:from-orange-500 hover:to-orange-600 transition-all shadow-md"
+                      className="px-6 py-2.5 bg-linear-to-r from-orange-400 to-orange-500 text-white font-semibold rounded-lg hover:from-orange-500 hover:to-orange-600 transition-all shadow-md"
                     >
                       অ্যাপ্লাই
                     </button>
@@ -679,10 +911,98 @@ export default function CheckoutPage() {
                   </div>
                 </div>
 
+                {/* ═══ Coin Section ═══ */}
+                <div className="bg-white/90 backdrop-blur rounded-2xl shadow-sm border border-orange-100 p-6">
+                  <div className="flex items-center gap-2 mb-6">
+                    <div className="w-8 h-8 rounded-lg bg-linear-to-br from-amber-400 to-orange-500 text-white flex items-center justify-center text-sm font-bold">
+                      <Coins className="w-4 h-4" />
+                    </div>
+                    <h2 className="text-lg font-bold text-gray-800">কয়েন ছাড়</h2>
+                    <span className="ml-auto text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full font-medium">
+                      100 কয়েন = ৳1
+                    </span>
+                  </div>
+
+                  {!appliedCoins ? (
+                    <div className="flex items-center justify-between p-4 bg-linear-to-r from-amber-50 to-orange-50 rounded-xl border border-amber-200">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-full bg-linear-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-md">
+                          <Coins className="w-6 h-6 text-white" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-800">কয়েন ব্যবহার করুন</p>
+                          <p className="text-sm text-gray-500">
+                            আপনার কাছে <span className="font-bold text-amber-600">{userCoinBalance.toLocaleString()}</span> কয়েন আছে
+                          </p>
+                          <p className="text-xs text-gray-400">সর্বোচ্চ {maxUsableCoins.toLocaleString()} কয়েন ব্যবহার করা যাবে</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setShowCoinModal(true)}
+                        disabled={userCoinBalance < 100 || maxUsableCoins < 100}
+                        className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition-all flex items-center gap-2 ${
+                          userCoinBalance >= 100 && maxUsableCoins >= 100
+                            ? 'bg-linear-to-r from-amber-500 to-orange-500 text-white hover:shadow-lg hover:shadow-amber-500/25 active:scale-[0.98]'
+                            : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                        }`}
+                      >
+                        <Plus className="w-4 h-4" />
+                        কয়েন যোগ করুন
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-linear-to-r from-amber-50 to-orange-50 rounded-xl border border-amber-200 animate-fadeIn">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-full bg-linear-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-md">
+                            <Coins className="w-6 h-6 text-white" />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-gray-800">কয়েন অ্যাপ্লাই হয়েছে</p>
+                            <p className="text-sm text-amber-600 font-medium">
+                              {appliedCoins.toLocaleString()} কয়েন = ৳{(appliedCoins / 100).toFixed(2)} ছাড়
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setShowCoinModal(true)}
+                            className="p-2 text-amber-600 hover:bg-amber-100 rounded-lg transition-colors"
+                            title="পরিবর্তন করুন"
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={removeCoins}
+                            className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                            title="সরান"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Progress bar showing remaining coins */}
+                      <div className="mt-2">
+                        <div className="flex justify-between text-xs text-gray-500 mb-1">
+                          <span>ব্যবহৃত: {appliedCoins.toLocaleString()}</span>
+                          <span>অবশিষ্ট: {(userCoinBalance - appliedCoins).toLocaleString()}</span>
+                        </div>
+                        <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-linear-to-r from-amber-400 to-orange-500 rounded-full transition-all"
+                            style={{ width: `${(appliedCoins / userCoinBalance) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* Order Notes */}
                 <div className="bg-white/90 backdrop-blur rounded-2xl shadow-sm border border-orange-100 p-6">
                   <div className="flex items-center gap-2 mb-6">
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-400 to-orange-500 text-white flex items-center justify-center text-sm font-bold">4</div>
+                    <div className="w-8 h-8 rounded-lg bg-linear-to-br from-orange-400 to-orange-500 text-white flex items-center justify-center text-sm font-bold">4</div>
                     <h2 className="text-lg font-bold text-gray-800">অর্ডার নোট</h2>
                   </div>
 
@@ -709,7 +1029,7 @@ export default function CheckoutPage() {
                 {/* Next Button */}
                 <button
                   onClick={handleNextStep}
-                  className="w-full py-4 bg-gradient-to-r from-orange-500 to-orange-600 text-white font-bold text-lg rounded-xl shadow-lg hover:shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                  className="w-full py-4 bg-linear-to-r from-orange-500 to-orange-600 text-white font-bold text-lg rounded-xl shadow-lg hover:shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2"
                 >
                   Next to Process
                   <ArrowRight className="w-5 h-5" />
@@ -729,7 +1049,7 @@ export default function CheckoutPage() {
                   >
                     <ChevronLeft className="w-5 h-5 text-gray-600" />
                   </button>
-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-green-400 to-green-500 text-white flex items-center justify-center text-sm font-bold">2</div>
+                  <div className="w-8 h-8 rounded-lg bg-linear-to-br from-green-400 to-green-500 text-white flex items-center justify-center text-sm font-bold">2</div>
                   <h2 className="text-lg font-bold text-gray-800">পেমেন্ট পদ্ধতি</h2>
                 </div>
 
@@ -813,7 +1133,7 @@ export default function CheckoutPage() {
 
                 {/* Wallet Payment Details */}
                 {paymentMethod === 'wallet' && (
-                  <div className="mt-6 p-5 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl border border-emerald-200">
+                  <div className="mt-6 p-5 bg-linear-to-r from-emerald-50 to-teal-50 rounded-xl border border-emerald-200">
                     <h4 className="font-semibold text-emerald-800 mb-3 flex items-center gap-2">
                       <Wallet className="w-5 h-5" />
                       ওয়ালেট পেমেন্ট বিবরণ
@@ -827,7 +1147,7 @@ export default function CheckoutPage() {
                         <span>ওয়ালেট থেকে কাটা হবে</span>
                         <span>-৳{walletDeduction}</span>
                       </div>
-                      <div className="border-t border-emerald-200 pt-2 flex justify-between font-bold text-emerald-800">
+                      <div className="flex justify-between font-bold text-emerald-800">
                         <span>ডেলিভারি চার্জ (ক্যাশ)</span>
                         <span>৳{deliveryCharge}</span>
                       </div>
@@ -870,7 +1190,7 @@ export default function CheckoutPage() {
                 {/* Place Order Button */}
                 <button
                   onClick={handlePlaceOrder}
-                  className="w-full mt-6 py-4 bg-gradient-to-r from-orange-500 via-amber-500 to-green-500 text-white font-bold text-lg rounded-xl shadow-lg hover:shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                  className="w-full mt-6 py-4 bg-linear-to-r from-orange-500 via-amber-500 to-green-500 text-white font-bold text-lg rounded-xl shadow-lg hover:shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2"
                 >
                   <Lock className="w-5 h-5" />
                   অর্ডার কনফার্ম করুন
@@ -882,7 +1202,7 @@ export default function CheckoutPage() {
           {/* Right Column - Order Summary (Sticky) */}
           <div className="lg:col-span-1">
             <div className="lg:sticky lg:top-24 space-y-6">
-              
+
               {/* Order Summary */}
               <div className="bg-white/90 backdrop-blur rounded-2xl shadow-lg border border-orange-100 p-6">
                 <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
@@ -921,14 +1241,21 @@ export default function CheckoutPage() {
                     </div>
                     <div className="flex justify-between text-gray-600">
                       <span>ডেলিভারি চার্জ</span>
-                      <span className={shippingMethod === 'insideDhaka' ? 'text-orange-600' : 'text-green-600'}>
-                        ৳{deliveryCharge}
-                      </span>
+                      <span className="text-green-600">৳{deliveryCharge}</span>
                     </div>
                     {discount > 0 && (
                       <div className="flex justify-between text-green-600 font-medium">
                         <span>ছাড় ({appliedCoupon?.code})</span>
                         <span>-৳{discount}</span>
+                      </div>
+                    )}
+                    {appliedCoins > 0 && (
+                      <div className="flex justify-between text-amber-600 font-medium">
+                        <span className="flex items-center gap-1">
+                          <Coins className="w-3 h-3" />
+                          কয়েন ছাড় ({appliedCoins})
+                        </span>
+                        <span>-৳{coinDiscount.toFixed(2)}</span>
                       </div>
                     )}
                     {useWallet && walletDeduction > 0 && (
@@ -973,11 +1300,19 @@ export default function CheckoutPage() {
 
       {/* Wallet Modal */}
       <WalletModal 
-  isOpen={showWalletModal} 
-  onClose={() => setShowWalletModal(false)} 
-  balance={walletBalance}
-  orderData={{ subtotal, deliveryCharge, discount, total: finalTotal }}
-/>
+        isOpen={showWalletModal} 
+        onClose={() => setShowWalletModal(false)} 
+        balance={walletBalance}
+      />
+
+      {/* Coin Modal */}
+      <CoinModal
+        isOpen={showCoinModal}
+        onClose={() => setShowCoinModal(false)}
+        userCoins={userCoinBalance}
+        onApplyCoins={handleApplyCoins}
+        maxUsableCoins={maxUsableCoins}
+      />
 
       {/* Animations */}
       <style>{`

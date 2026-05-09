@@ -13,7 +13,7 @@ const seed = async () => {
   try {
     await mongoose.connect(process.env.MONGO_URI);
     console.log('MongoDB connected');
-
+    
     // আগে admin আছে কিনা check করো
     const existing = await Admin.findOne({ email: ADMIN_EMAIL });
     if (existing) {

@@ -1,6 +1,31 @@
 import { useState } from 'react';
 import { useNavigate } from "react-router";
 
+const ProductCardStarRating = ({ rating, reviewCount = 0 }) => (
+  <div className="flex items-center gap-1">
+    {[...Array(5)].map((_, i) => (
+      <svg
+        key={i}
+        className={`w-3.5 h-3.5 ${i < Math.floor(rating) ? 'text-orange-400' : 'text-emerald-200'}`}
+        fill="currentColor"
+        viewBox="0 0 20 20"
+      >
+        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+      </svg>
+    ))}
+    <span className="text-[10px] text-emerald-500 font-medium ml-1">({reviewCount})</span>
+  </div>
+);
+
+const ProductCardSoldBadge = ({ sold }) => (
+  <div className="absolute top-3 right-3 flex items-center gap-1 bg-orange-100/90 text-orange-600 text-[10px] font-bold px-2 py-1 rounded-lg border border-orange-200 backdrop-blur-sm">
+    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+    </svg>
+    {sold}+ Sold
+  </div>
+);
+
 const ProductCard = ({ product }) => {
   const [selectedVar, setSelectedVar] = useState(product.variations?.[0] || null);
   const [showVariations, setShowVariations] = useState(false);
@@ -21,33 +46,6 @@ const ProductCard = ({ product }) => {
   };
 
   const whatsappLink = `https://wa.me/8801712345678?text=Hi! I want to order ${encodeURIComponent(product.name)} ${selectedVar ? `(${selectedVar.label})` : ''}`;
-
-  // Star Rating Component
-  const StarRating = ({ rating }) => (
-    <div className="flex items-center gap-1">
-      {[...Array(5)].map((_, i) => (
-        <svg
-          key={i}
-          className={`w-3.5 h-3.5 ${i < Math.floor(rating) ? 'text-orange-400' : 'text-emerald-200'}`}
-          fill="currentColor"
-          viewBox="0 0 20 20"
-        >
-          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-        </svg>
-      ))}
-      <span className="text-[10px] text-emerald-500 font-medium ml-1">({product.reviews || 0})</span>
-    </div>
-  );
-
-  // Sold Badge
-  const SoldBadge = ({ sold }) => (
-    <div className="absolute top-3 right-3 flex items-center gap-1 bg-orange-100/90 text-orange-600 text-[10px] font-bold px-2 py-1 rounded-lg border border-orange-200 backdrop-blur-sm">
-      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-      </svg>
-      {sold}+ Sold
-    </div>
-  );
 
   return (
      <div className='flex flex-col'>
@@ -80,7 +78,7 @@ const ProductCard = ({ product }) => {
               </div>
 
               {/* Sold Badge - Top Right */}
-              {product.sold && <SoldBadge sold={product.sold} />}
+              {product.sold && <ProductCardSoldBadge sold={product.sold} />}
             </div>
 
           {/* Content */}
@@ -89,7 +87,7 @@ const ProductCard = ({ product }) => {
               {product.name}
             </h3>
             
-            <StarRating rating={product.rating} />
+            <ProductCardStarRating rating={product.rating} reviewCount={product.reviews || 0} />
             
             {/* Price */}
             <div className="flex items-center gap-2 mt-2 mb-3">

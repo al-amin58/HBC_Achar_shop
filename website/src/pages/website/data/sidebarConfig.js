@@ -1,0 +1,43 @@
+import {
+  LayoutDashboard,
+  ShoppingBag,
+  Package,
+  Layers,
+  Zap,
+  Users,
+  Wallet,
+  FileText,
+  Ticket,
+  Image,
+  Star,
+  Truck,
+  BarChart3,
+  Settings,
+  Grid3X3,
+  FolderTree,
+} from 'lucide-react';
+
+export const sidebarConfig = [
+  { icon: LayoutDashboard, label: 'Dashboard' },
+  { icon: ShoppingBag, label: 'Orders', badge: '156' },
+  {
+    icon: Package,
+    label: 'Products',
+    children: [
+      { icon: Package, label: 'Products' },
+      { icon: Layers, label: 'Product Variations' },
+      { icon: FolderTree, label: 'Categories' },
+      { icon: Grid3X3, label: 'Sub-Categories' },
+    ],
+  },
+  { icon: Zap, label: 'Flash Sale', badge: 'LIVE' },
+  { icon: Users, label: 'Customers' },
+  { icon: Wallet, label: 'Wallet' },
+  { icon: FileText, label: 'Landing Pages' },
+  { icon: Ticket, label: 'Coupons', badge: '12' },
+  { icon: Image, label: 'Campaign Banner' },
+  { icon: Star, label: 'Reviews', badge: '24' },
+  { icon: Truck, label: 'Delivery System' },
+  { icon: BarChart3, label: 'Reports' },
+  { icon: Settings, label: 'Settings' },
+];

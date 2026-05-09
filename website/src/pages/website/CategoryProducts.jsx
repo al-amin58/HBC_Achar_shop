@@ -259,8 +259,8 @@ const CategoryProducts = () => {
     sortBy
   ]);
 
-  // ── Filter Sidebar Component ─────────────────────────────
-  const FilterContent = () => (
+  // ── Filter sidebar (render fn — not a nested component; satisfies react-hooks/static-components)
+  const renderFilterContent = () => (
     <div className="space-y-6">
       {/* Active Filters Badge */}
       {activeFilterCount > 0 && (
@@ -465,7 +465,7 @@ const CategoryProducts = () => {
                 <h2 className="text-lg font-bold text-gray-800">Filters</h2>
                 <Filter className="w-5 h-5 text-orange-500" />
               </div>
-              <FilterContent />
+              {renderFilterContent()}
             </div>
           </aside>
 
@@ -609,7 +609,7 @@ const CategoryProducts = () => {
             </div>
             
             <div className="overflow-y-auto p-5 pb-32">
-              <FilterContent />
+              {renderFilterContent()}
             </div>
 
             {/* Mobile Drawer Footer */}

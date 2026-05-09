@@ -22,7 +22,9 @@ export default function AdminLogin() {
     setLoading(true);
     try {
       const response = await api.post('/auth/admin/login', form);
+      // Keep shared axios auth flow compatible without editing axios.js.
       localStorage.setItem('adminToken', response.data.token);
+      localStorage.setItem('token', response.data.token);
       toast.success('Welcome, Admin!');
       navigate('/admin/dashboard', { replace: true });
     } catch (err) {

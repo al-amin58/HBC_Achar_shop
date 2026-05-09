@@ -1,4 +1,4 @@
-import { categories } from '../../data/navbarData.js';
+import { categories } from "../../pages/website/data/navbarData.js";
 
 const CategoryBar = () => {
   return (

@@ -1,2 +1,21 @@
 @import "tailwindcss";
 
+
+/* Sidebar / panels: scroll without visible scrollbar */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+
+/* 
+.lobster-text {
+  font-family: 'Lobster', cursive;
+} */
+ 
+
+
+                
