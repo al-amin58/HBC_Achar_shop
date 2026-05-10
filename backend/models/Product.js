@@ -12,7 +12,11 @@ const productSchema = new mongoose.Schema(
       type: String,
       default: "",
       trim: true,
-      maxlength: 120,
+      maxlength: 500,
+    },
+    variationIds: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: "ProductVariation" }],
+      default: [],
     },
     sku: {
       type: String,
@@ -50,6 +54,15 @@ const productSchema = new mongoose.Schema(
       type: Number,
       default: 0,
       min: 0,
+    },
+    lowStockThreshold: {
+      type: Number,
+      default: null,
+      min: 0,
+    },
+    description: {
+      type: String,
+      default: "",
     },
     sold: {
       type: Number,

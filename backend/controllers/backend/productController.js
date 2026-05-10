@@ -1,17 +1,49 @@
 import mongoose from "mongoose";
 import Product from "../../models/Product.js";
+import ProductVariation from "../../models/ProductVariation.js";
 
 const toObjectId = (value) => {
   if (!value || value === "") return null;
   return mongoose.Types.ObjectId.isValid(value) ? value : null;
 };
 
+function normalizeVariationIds(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const id of raw) {
+    if (id != null && mongoose.Types.ObjectId.isValid(String(id))) {
+      out.push(new mongoose.Types.ObjectId(String(id)));
+    }
+  }
+  return out;
+}
+
+async function syncVariantSummary(product) {
+  const ids = product.variationIds;
+  if (!ids || ids.length === 0) {
+    product.variant = "";
+    return;
+  }
+  const vars = await ProductVariation.find({ _id: { $in: ids } }).lean();
+  const order = new Map(ids.map((id, i) => [String(id), i]));
+  vars.sort((a, b) => (order.get(String(a._id)) ?? 0) - (order.get(String(b._id)) ?? 0));
+  product.variant = vars
+    .map((v) =>
+      v.combination?.length ? v.combination.map((c) => c.value).join(" / ") : String(v.sku || "")
+    )
+    .filter(Boolean)
+    .join(" · ");
+}
+
+const productPopulate = [
+  { path: "category", select: "name slug" },
+  { path: "subCategory", select: "name slug" },
+  { path: "variationIds", select: "sku combination" },
+];
+
 export const getProducts = async (_req, res) => {
   try {
-    const list = await Product.find()
-      .populate("category", "name slug")
-      .populate("subCategory", "name slug")
-      .sort({ createdAt: -1 });
+    const list = await Product.find().populate(productPopulate).sort({ createdAt: -1 });
     return res.status(200).json(list);
   } catch {
     return res.status(500).json({ message: "Failed to fetch products." });
@@ -22,7 +54,6 @@ export const createProduct = async (req, res) => {
   try {
     const {
       name,
-      variant,
       sku,
       category,
       subCategory,
@@ -38,6 +69,9 @@ export const createProduct = async (req, res) => {
       images,
       seoTitle,
       seoDescription,
+      variationIds,
+      lowStockThreshold,
+      description,
     } = req.body;
 
     if (!name || !String(name).trim()) {
@@ -57,14 +91,15 @@ export const createProduct = async (req, res) => {
 
     const catId = toObjectId(category);
     const subId = toObjectId(subCategory);
+    const vIds = normalizeVariationIds(variationIds);
 
-    const product = await Product.create({
+    const product = new Product({
       name: String(name).trim(),
-      variant: variant != null ? String(variant).trim() : "",
       sku: String(sku).trim(),
       category: catId,
       subCategory: subId,
       brand: brand != null ? String(brand).trim() : "",
+      variationIds: vIds,
       price: Number(price),
       originalPrice:
         originalPrice === null || originalPrice === "" || originalPrice === undefined
@@ -73,6 +108,11 @@ export const createProduct = async (req, res) => {
       stock: stock != null ? Math.max(0, Number(stock)) : 0,
       sold: sold != null ? Math.max(0, Number(sold)) : 0,
       rating: rating != null ? Math.min(5, Math.max(0, Number(rating))) : 0,
+      lowStockThreshold:
+        lowStockThreshold === null || lowStockThreshold === "" || lowStockThreshold === undefined
+          ? null
+          : Math.max(0, Number(lowStockThreshold)),
+      description: description != null ? String(description) : "",
       status: ["active", "flash", "outstock", "draft"].includes(status) ? status : "active",
       featured: Boolean(featured),
       image: image != null ? String(image).trim() : "",
@@ -81,9 +121,10 @@ export const createProduct = async (req, res) => {
       seoDescription: seoDescription != null ? String(seoDescription).trim() : "",
     });
 
-    const populated = await Product.findById(product._id)
-      .populate("category", "name slug")
-      .populate("subCategory", "name slug");
+    await syncVariantSummary(product);
+    await product.save();
+
+    const populated = await Product.findById(product._id).populate(productPopulate);
 
     return res.status(201).json({
       message: "Product created successfully.",
@@ -112,7 +153,6 @@ export const updateProduct = async (req, res) => {
 
     const {
       name,
-      variant,
       sku,
       category,
       subCategory,
@@ -128,6 +168,9 @@ export const updateProduct = async (req, res) => {
       images,
       seoTitle,
       seoDescription,
+      variationIds,
+      lowStockThreshold,
+      description,
     } = req.body;
 
     if (sku !== undefined && String(sku).trim() !== product.sku) {
@@ -139,7 +182,6 @@ export const updateProduct = async (req, res) => {
     }
 
     if (name !== undefined) product.name = String(name).trim();
-    if (variant !== undefined) product.variant = String(variant).trim();
     if (brand !== undefined) product.brand = String(brand).trim();
     if (price !== undefined) product.price = Number(price);
     if (originalPrice !== undefined) {
@@ -162,15 +204,23 @@ export const updateProduct = async (req, res) => {
     if (category !== undefined) product.category = toObjectId(category);
     if (subCategory !== undefined) product.subCategory = toObjectId(subCategory);
 
+    if (variationIds !== undefined) {
+      product.variationIds = normalizeVariationIds(variationIds);
+      await syncVariantSummary(product);
+    }
+    if (lowStockThreshold !== undefined) {
+      product.lowStockThreshold =
+        lowStockThreshold === null || lowStockThreshold === "" ? null : Math.max(0, Number(lowStockThreshold));
+    }
+    if (description !== undefined) product.description = String(description);
+
     if (!product.name) {
       return res.status(400).json({ message: "Product name is required." });
     }
 
     await product.save();
 
-    const populated = await Product.findById(product._id)
-      .populate("category", "name slug")
-      .populate("subCategory", "name slug");
+    const populated = await Product.findById(product._id).populate(productPopulate);
 
     return res.status(200).json({
       message: "Product updated successfully.",

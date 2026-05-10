@@ -7,5 +7,9 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-  ]
+  ],
+  optimizeDeps: {
+    // recharts imports `react-is`; force both into prebundle so resolution succeeds
+    include: ['react-is', 'recharts'],
+  },
 })

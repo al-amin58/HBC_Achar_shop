@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useReducer } from "react";
 import { useNavigate } from "react-router";
 import {
   Search as SearchIcon,
@@ -6,7 +6,6 @@ import {
   Download,
   Plus,
   Check,
-  Star,
   MoreVertical,
   Eye,
   Edit,
@@ -33,16 +32,172 @@ import {
   Heart,
   X,
   ImagePlus,
+  Sparkles,
+  Bold,
+  Italic,
+  List as BulletListIcon,
+  ListOrdered,
+  Heading2,
+  Quote,
+  Link2,
 } from "lucide-react";
+import { useEditor, EditorContent } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import Placeholder from "@tiptap/extension-placeholder";
+import Link from "@tiptap/extension-link";
 import api from "../../api/axios";
 import { toast } from "react-toastify";
 
 const PLACEHOLDER_IMG =
   "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=100&h=100&fit=crop";
 
+function ProductDescriptionEditor({ value, onChange, mountKey }) {
+  const [, refresh] = useReducer((x) => x + 1, 0);
+
+  const editor = useEditor(
+    {
+      immediatelyRender: false,
+      extensions: [
+        StarterKit.configure({
+          heading: { levels: [2, 3] },
+        }),
+        Placeholder.configure({
+          placeholder: "প্রোডাক্টের বিস্তারিত লিখুন...",
+        }),
+        Link.configure({
+          openOnClick: false,
+          HTMLAttributes: {
+            class: "text-[#ffb366] underline underline-offset-2",
+          },
+        }),
+      ],
+      content: value?.trim() ? value : "<p></p>",
+      editorProps: {
+        attributes: {
+          class:
+            "admin-tiptap-editor min-h-[160px] max-w-none px-3 py-2.5 text-sm text-white/90 focus:outline-none [&_p]:my-1.5 [&_ul]:my-2 [&_ol]:my-2 [&_li]:my-0.5 [&_blockquote]:border-l-2 [&_blockquote]:border-[#ff9f43]/45 [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-white/75 [&_h2]:text-base [&_h2]:font-bold [&_h3]:text-sm [&_h3]:font-semibold",
+        },
+      },
+      onUpdate: ({ editor: ed }) => onChange(ed.getHTML()),
+    },
+    [mountKey]
+  );
+
+  useEffect(() => {
+    if (!editor) return;
+    const bump = () => refresh();
+    editor.on("selectionUpdate", bump);
+    editor.on("transaction", bump);
+    return () => {
+      editor.off("selectionUpdate", bump);
+      editor.off("transaction", bump);
+    };
+  }, [editor]);
+
+  if (!editor) {
+    return (
+      <div className="rounded-2xl border border-white/10 min-h-55 bg-black/25 animate-pulse" />
+    );
+  }
+
+  const tBtn = (active) =>
+    `inline-flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors ${
+      active ? "bg-[#ff9f43]/20 text-[#ffb366]" : "bg-white/6 text-white/65 hover:bg-white/10 hover:text-white/90"
+    }`;
+
+  const runLink = () => {
+    const prev = editor.getAttributes("link").href;
+    const url = window.prompt("লিংক URL দিন", prev || "https://");
+    if (url === null) return;
+    if (url === "") {
+      editor.chain().focus().extendMarkRange("link").unsetLink().run();
+      return;
+    }
+    editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
+  };
+
+  return (
+    <div className="admin-tiptap rounded-2xl overflow-hidden border border-white/10 bg-black/25">
+      <div className="flex flex-wrap gap-1 border-b border-white/8 bg-white/4 px-2 py-2">
+        <button
+          type="button"
+          className={tBtn(editor.isActive("bold"))}
+          onClick={() => editor.chain().focus().toggleBold().run()}
+        >
+          <Bold size={14} /> Bold
+        </button>
+        <button
+          type="button"
+          className={tBtn(editor.isActive("italic"))}
+          onClick={() => editor.chain().focus().toggleItalic().run()}
+        >
+          <Italic size={14} /> Italic
+        </button>
+        <button
+          type="button"
+          className={tBtn(editor.isActive("heading", { level: 2 }))}
+          onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+        >
+          <Heading2 size={14} /> H2
+        </button>
+        <button
+          type="button"
+          className={tBtn(editor.isActive("bulletList"))}
+          onClick={() => editor.chain().focus().toggleBulletList().run()}
+        >
+          <BulletListIcon size={14} />
+        </button>
+        <button
+          type="button"
+          className={tBtn(editor.isActive("orderedList"))}
+          onClick={() => editor.chain().focus().toggleOrderedList().run()}
+        >
+          <ListOrdered size={14} />
+        </button>
+        <button
+          type="button"
+          className={tBtn(editor.isActive("blockquote"))}
+          onClick={() => editor.chain().focus().toggleBlockquote().run()}
+        >
+          <Quote size={14} />
+        </button>
+        <button type="button" className={tBtn(editor.isActive("link"))} onClick={runLink}>
+          <Link2 size={14} /> Link
+        </button>
+        <button
+          type="button"
+          className={tBtn(false)}
+          onClick={() => editor.chain().focus().clearContent(true).run()}
+        >
+          Clear
+        </button>
+      </div>
+      <EditorContent editor={editor} />
+    </div>
+  );
+}
+
+function extractVariationIdsFromProduct(p) {
+  const raw = p.variationIds;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((x) => (x && typeof x === "object" && x._id != null ? String(x._id) : String(x)))
+    .filter(Boolean);
+}
+
+function formatVariationOptionLabel(v) {
+  const combo = v.combination || [];
+  const text = combo.map((c) => c.value).join(" · ");
+  return text ? `${v.sku} — ${text}` : String(v.sku || "");
+}
+
+function stripHtml(html) {
+  if (!html || typeof html !== "string") return "";
+  return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
+
 const defaultFilter = () => ({
   categoryId: "",
-  brand: "",
   stockStatus: "all",
   flash: "all",
   priceMin: "",
@@ -53,22 +208,35 @@ const defaultFilter = () => ({
 
 const emptyForm = () => ({
   name: "",
-  variant: "",
   sku: "",
   category: "",
   subCategory: "",
-  brand: "",
   price: "",
   originalPrice: "",
   stock: "",
-  sold: "",
-  rating: "",
   status: "active",
   imageUrls: [],
   seoTitle: "",
   seoDescription: "",
   featured: false,
+  variationIds: [],
+  lowStockThreshold: "",
+  description: "",
 });
+
+function generateSku(name = "") {
+  const base = name
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9\s]/g, "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w.slice(0, 3))
+    .join("-")
+    .slice(0, 20);
+  const rand = Math.floor(1000 + Math.random() * 9000);
+  return base ? `${base}-${rand}` : `SKU-${rand}`;
+}
 
 /** Ordered list for editor: first item = thumbnail / main `image` */
 function buildImageUrlsFromProduct(p) {
@@ -92,6 +260,8 @@ function normalizeProduct(p) {
     categoryId: cat?._id?.toString?.() || (typeof p.category === "string" ? p.category : "") || "",
     subCategoryId:
       sub?._id?.toString?.() || (typeof p.subCategory === "string" ? p.subCategory : "") || "",
+    variationIds: extractVariationIdsFromProduct(p),
+    lowStockThreshold: p.lowStockThreshold ?? null,
     date: p.createdAt
       ? new Date(p.createdAt).toLocaleDateString("en-US", {
           month: "short",
@@ -109,27 +279,30 @@ function toPayload(form) {
   const thumbnail = urls[0] || "";
   return {
     name: form.name.trim(),
-    variant: form.variant.trim(),
     sku: form.sku.trim(),
     category: form.category || null,
     subCategory: form.subCategory || null,
-    brand: form.brand.trim(),
+    brand: "",
     price: Number(form.price),
     originalPrice: form.originalPrice === "" ? null : Number(form.originalPrice),
     stock: form.stock === "" ? 0 : Number(form.stock),
-    sold: form.sold === "" ? 0 : Number(form.sold),
-    rating: form.rating === "" ? 0 : Number(form.rating),
     status: form.status,
     featured: form.featured,
     image: thumbnail,
     images: urls,
     seoTitle: form.seoTitle.trim(),
     seoDescription: form.seoDescription.trim(),
+    variationIds: (form.variationIds || []).map(String).filter(Boolean),
+    lowStockThreshold:
+      form.lowStockThreshold === "" || form.lowStockThreshold === undefined
+        ? null
+        : Math.max(0, Number(form.lowStockThreshold)),
+    description: form.description || "",
   };
 }
 
 function downloadCsv(rows, filename = "products-export.csv") {
-  const headers = ["name", "sku", "category", "brand", "price", "stock", "status", "sold", "rating"];
+  const headers = ["name", "sku", "category", "variant", "price", "stock", "status"];
   const lines = [
     headers.join(","),
     ...rows.map((r) =>
@@ -166,6 +339,7 @@ export default function Products() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [subCategories, setSubCategories] = useState([]);
+  const [variationCatalog, setVariationCatalog] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -175,12 +349,13 @@ export default function Products() {
   const [productModalOpen, setProductModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
+  /** Remount Tiptap when opening the modal so `content` matches add vs edit (react-quill used findDOMNode; R19 removed it). */
+  const [descriptionEditorKey, setDescriptionEditorKey] = useState(0);
 
   const [quickViewProduct, setQuickViewProduct] = useState(null);
   const [seoProduct, setSeoProduct] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  const [imageUrlDraft, setImageUrlDraft] = useState("");
   const imageFileInputRef = useRef(null);
 
   const [page, setPage] = useState(1);
@@ -189,14 +364,16 @@ export default function Products() {
   const fetchAll = async () => {
     try {
       setLoading(true);
-      const [prodRes, catRes, subRes] = await Promise.all([
+      const [prodRes, catRes, subRes, varRes] = await Promise.all([
         api.get("/products"),
         api.get("/categories"),
         api.get("/subcategories"),
+        api.get("/product-variations"),
       ]);
       setProducts((prodRes.data || []).map(normalizeProduct));
       setCategories(catRes.data || []);
       setSubCategories(subRes.data || []);
+      setVariationCatalog(varRes.data || []);
     } catch (err) {
       const msg = err?.response?.data?.message || "Failed to load products.";
       toast.error(msg);
@@ -243,13 +420,6 @@ export default function Products() {
     });
   };
 
-  const addImageUrlFromDraft = () => {
-    const u = imageUrlDraft.trim();
-    if (!u) return;
-    setForm((f) => ({ ...f, imageUrls: [...f.imageUrls, u] }));
-    setImageUrlDraft("");
-  };
-
   const moveImage = (index, delta) => {
     setForm((f) => {
       const arr = [...f.imageUrls];
@@ -264,21 +434,12 @@ export default function Products() {
     setForm((f) => ({ ...f, imageUrls: f.imageUrls.filter((_, i) => i !== index) }));
   };
 
-  const brands = useMemo(() => {
-    const set = new Set();
-    products.forEach((p) => {
-      if (p.brand?.trim()) set.add(p.brand.trim());
-    });
-    return Array.from(set).sort();
-  }, [products]);
-
   const filteredProducts = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
     return products.filter((p) => {
       if (q && !p.name.toLowerCase().includes(q) && !p.sku.toLowerCase().includes(q)) return false;
 
       if (activeFilter.categoryId && p.categoryId !== activeFilter.categoryId) return false;
-      if (activeFilter.brand && p.brand !== activeFilter.brand) return false;
 
       if (activeFilter.sku.trim()) {
         if (!p.sku.toLowerCase().includes(activeFilter.sku.toLowerCase().trim())) return false;
@@ -352,36 +513,36 @@ export default function Products() {
 
   const openCreateModal = () => {
     setEditingId(null);
-    setImageUrlDraft("");
     setForm(emptyForm());
+    setDescriptionEditorKey((k) => k + 1);
     setProductModalOpen(true);
   };
 
   const openEditModal = (p) => {
     setEditingId(p.id);
-    setImageUrlDraft("");
     setForm({
       name: p.name || "",
-      variant: p.variant || "",
       sku: p.sku || "",
       category: p.categoryId || "",
       subCategory: p.subCategoryId || "",
-      brand: p.brand || "",
       price: p.price != null ? String(p.price) : "",
       originalPrice: p.originalPrice != null ? String(p.originalPrice) : "",
       stock: p.stock != null ? String(p.stock) : "",
-      sold: p.sold != null ? String(p.sold) : "",
-      rating: p.rating != null ? String(p.rating) : "",
       status: p.status || "active",
       imageUrls: buildImageUrlsFromProduct(p),
       seoTitle: p.seoTitle || "",
       seoDescription: p.seoDescription || "",
       featured: Boolean(p.featured),
+      variationIds: extractVariationIdsFromProduct(p),
+      lowStockThreshold: p.lowStockThreshold != null ? String(p.lowStockThreshold) : "",
+      description: p.description || "",
     });
+    setDescriptionEditorKey((k) => k + 1);
     setProductModalOpen(true);
   };
 
   const handleSaveProduct = async () => {
+
     if (!form.name.trim() || !form.sku.trim()) {
       toast.error("Name and SKU are required.");
       return;
@@ -402,7 +563,6 @@ export default function Products() {
       }
       setProductModalOpen(false);
       setEditingId(null);
-      setImageUrlDraft("");
       setForm(emptyForm());
       await fetchAll();
       setSelectedItems([]);
@@ -451,22 +611,22 @@ export default function Products() {
     setForm({
       ...emptyForm(),
       name: `${p.name} (Copy)`,
-      variant: p.variant || "",
       sku,
       category: p.categoryId || "",
       subCategory: p.subCategoryId || "",
-      brand: p.brand || "",
       price: p.price != null ? String(p.price) : "",
       originalPrice: p.originalPrice != null ? String(p.originalPrice) : "",
       stock: p.stock != null ? String(p.stock) : "0",
-      sold: "0",
-      rating: p.rating != null ? String(p.rating) : "0",
       status: p.status || "active",
       imageUrls: buildImageUrlsFromProduct(p),
       seoTitle: p.seoTitle || "",
       seoDescription: p.seoDescription || "",
       featured: false,
+      variationIds: extractVariationIdsFromProduct(p),
+      lowStockThreshold: p.lowStockThreshold != null ? String(p.lowStockThreshold) : "",
+      description: p.description || "",
     });
+    setDescriptionEditorKey((k) => k + 1);
     setProductModalOpen(true);
     setDropdownOpen(null);
     toast.info("Review and save the duplicate.");
@@ -517,13 +677,36 @@ export default function Products() {
     toast.info("Filters reset.");
   };
 
+  const categoriesActive = useMemo(
+    () => categories.filter((c) => c.status !== "inactive"),
+    [categories]
+  );
+
   const formSubCategories = useMemo(() => {
-    if (!form.category) return subCategories;
+    if (!form.category) return [];
     return subCategories.filter((s) => {
+      if (s.status === "inactive") return false;
       const cid = s.category?._id?.toString?.() ?? (typeof s.category === "string" ? s.category : "");
       return String(cid) === String(form.category);
     });
   }, [form.category, subCategories]);
+
+  const toggleVariationId = (id) => {
+    const sid = String(id);
+    setForm((f) => {
+      const cur = (f.variationIds || []).map(String);
+      const has = cur.includes(sid);
+      const next = has ? cur.filter((x) => x !== sid) : [...cur, sid];
+      return { ...f, variationIds: next };
+    });
+  };
+
+  const setAllVariations = (checked) => {
+    setForm((f) => ({
+      ...f,
+      variationIds: checked ? variationCatalog.map((v) => String(v._id)) : [],
+    }));
+  };
 
   const getStatusBadge = (status) => {
     switch (status) {
@@ -535,7 +718,7 @@ export default function Products() {
         );
       case "flash":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-gradient-to-r from-[#ff9f43]/20 to-[#ffa502]/20 text-[#ff9f43] animate-pulse">
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-linear-to-r from-[#ff9f43]/20 to-[#ffa502]/20 text-[#ff9f43] animate-pulse">
             <Zap size={10} /> Flash
           </span>
         );
@@ -554,18 +737,28 @@ export default function Products() {
     }
   };
 
-  const getStockBar = (stock) => {
+  const getStockBar = (stock, lowThreshold) => {
     const n = Number(stock) || 0;
+    const thr =
+      lowThreshold != null && lowThreshold !== "" && !Number.isNaN(Number(lowThreshold))
+        ? Number(lowThreshold)
+        : null;
     const pct = Math.min((n / 1000) * 100, 100);
     let color = "bg-[#2ed573]";
-    if (n < 100) color = "bg-[#ff4757]";
+    if (thr != null && n > 0 && n <= thr) color = "bg-[#a55eea]";
+    else if (n < 100) color = "bg-[#ff4757]";
     else if (n < 400) color = "bg-[#ffa502]";
     return (
       <div>
         <div className="w-20 h-1.5 bg-white/10 rounded-full overflow-hidden mb-1">
           <div className={`h-full ${color} rounded-full transition-all`} style={{ width: `${pct}%` }} />
         </div>
-        <span className="text-xs text-white/50">{n} units</span>
+        <span className="text-xs text-white/50">
+          {n} units
+          {thr != null && n > 0 && n <= thr && (
+            <span className="text-[#a55eea] font-semibold ml-1">(alert)</span>
+          )}
+        </span>
       </div>
     );
   };
@@ -609,7 +802,7 @@ export default function Products() {
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 animate-fadeIn">
         <div>
-          <h1 className="text-3xl lg:text-4xl font-extrabold bg-gradient-to-r from-white to-[#ffb366] bg-clip-text text-transparent">
+          <h1 className="text-3xl lg:text-4xl font-extrabold bg-linear-to-r from-white to-[#ffb366] bg-clip-text text-transparent">
             Product Management
           </h1>
           <p className="text-white/50 text-sm mt-1">Manage your achar products</p>
@@ -618,21 +811,21 @@ export default function Products() {
           <button
             type="button"
             onClick={() => setFilterOpen(!filterOpen)}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-transparent border border-white/[0.08] text-white/60 text-sm font-semibold hover:border-[#ff9f43] hover:text-[#ff9f43] hover:bg-[#ff9f43]/5 transition-all"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-transparent border border-white/8 text-white/60 text-sm font-semibold hover:border-[#ff9f43] hover:text-[#ff9f43] hover:bg-[#ff9f43]/5 transition-all"
           >
             <SlidersHorizontal size={16} /> Filter
           </button>
           <button
             type="button"
             onClick={handleExport}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#2ed573] to-[#7bed9f] text-[#1a0510] text-sm font-semibold shadow-lg shadow-[#2ed573]/20 hover:shadow-[#2ed573]/30 hover:-translate-y-0.5 transition-all"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-linear-to-r from-[#2ed573] to-[#7bed9f] text-[#1a0510] text-sm font-semibold shadow-lg shadow-[#2ed573]/20 hover:shadow-[#2ed573]/30 hover:-translate-y-0.5 transition-all"
           >
             <Download size={16} /> Export
           </button>
           <button
             type="button"
             onClick={openCreateModal}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#ff9f43] to-[#ffb366] text-[#1a0510] text-sm font-semibold shadow-lg shadow-[#ff9f43]/20 hover:shadow-[#ff9f43]/30 hover:-translate-y-0.5 transition-all"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-linear-to-r from-[#ff9f43] to-[#ffb366] text-[#1a0510] text-sm font-semibold shadow-lg shadow-[#ff9f43]/20 hover:shadow-[#ff9f43]/30 hover:-translate-y-0.5 transition-all"
           >
             <Plus size={16} /> Add Product
           </button>
@@ -643,9 +836,9 @@ export default function Products() {
         {stats.map((stat) => (
           <div
             key={stat.label}
-            className="group relative bg-[#2d0a1f]/80 backdrop-blur-sm border border-white/[0.08] rounded-[20px] p-6 hover:-translate-y-1 hover:border-[#ff9f43]/20 hover:shadow-[0_0_40px_rgba(255,159,67,0.1),0_8px_32px_rgba(0,0,0,0.3)] transition-all duration-300 overflow-hidden"
+            className="group relative bg-[#2d0a1f]/80 backdrop-blur-sm border border-white/8 rounded-[20px] p-6 hover:-translate-y-1 hover:border-[#ff9f43]/20 hover:shadow-[0_0_40px_rgba(255,159,67,0.1),0_8px_32px_rgba(0,0,0,0.3)] transition-all duration-300 overflow-hidden"
           >
-            <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-[#ff9f43] to-[#2ed573] opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="absolute top-0 left-0 right-0 h-0.75 bg-linear-to-r from-[#ff9f43] to-[#2ed573] opacity-0 group-hover:opacity-100 transition-opacity" />
             <div className="flex items-start justify-between mb-4">
               <div className={`w-12 h-12 rounded-xl ${stat.bg} ${stat.color} flex items-center justify-center text-xl`}>
                 <stat.icon size={22} />
@@ -658,7 +851,7 @@ export default function Products() {
                 {stat.up ? <ArrowUp size={10} /> : <ArrowDown size={10} />} {stat.growth}
               </span>
             </div>
-            <div className="text-3xl font-extrabold bg-gradient-to-r from-white to-white/60 bg-clip-text text-transparent mb-1">
+            <div className="text-3xl font-extrabold bg-linear-to-r from-white to-white/60 bg-clip-text text-transparent mb-1">
               {stat.value}
             </div>
             <div className="text-sm text-white/50 mb-4">{stat.label}</div>
@@ -679,8 +872,8 @@ export default function Products() {
       </div>
 
       <div
-        className={`bg-[#2d0a1f]/80 backdrop-blur-sm border border-white/[0.08] rounded-[20px] mb-6 overflow-hidden transition-all duration-500 ${
-          filterOpen ? "max-h-[600px] opacity-100" : "max-h-0 opacity-0 border-0"
+        className={`bg-[#2d0a1f]/80 backdrop-blur-sm border border-white/8 rounded-[20px] mb-6 overflow-hidden transition-all duration-500 ${
+          filterOpen ? "max-h-150 opacity-100" : "max-h-0 opacity-0 border-0"
         }`}
       >
         <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -689,29 +882,17 @@ export default function Products() {
             <select
               value={draftFilter.categoryId}
               onChange={(e) => setDraftFilter((f) => ({ ...f, categoryId: e.target.value }))}
-              className="px-4 py-2.5 bg-white/5 border border-white/[0.08] rounded-xl text-sm text-white focus:outline-none focus:border-[#ff9f43] focus:shadow-[0_0_15px_rgba(255,159,67,0.1)] transition-all"
+              style={{ backgroundColor: "#2d0a1f", color: "#fff" }}
+              className="px-4 py-2.5 bg-white/5 border border-white/8 rounded-xl text-sm text-white focus:outline-none focus:border-[#ff9f43] focus:shadow-[0_0_15px_rgba(255,159,67,0.1)] transition-all"
             >
               <option value="">All Categories</option>
-              {categories.map((c) => (
-                <option key={c._id} value={c._id} className="bg-[#2d0a1f]">
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-col gap-2">
-            <label className="text-xs font-medium text-white/50">Brand</label>
-            <select
-              value={draftFilter.brand}
-              onChange={(e) => setDraftFilter((f) => ({ ...f, brand: e.target.value }))}
-              className="px-4 py-2.5 bg-white/5 border border-white/[0.08] rounded-xl text-sm text-white focus:outline-none focus:border-[#ff9f43] transition-all"
-            >
-              <option value="">All Brands</option>
-              {brands.map((b) => (
-                <option key={b} value={b} className="bg-[#2d0a1f]">
-                  {b}
-                </option>
-              ))}
+              {categories
+                .filter((c) => c.status !== "inactive")
+                .map((c) => (
+                  <option key={c._id} value={c._id} className="bg-[#2d0a1f] ">
+                    {c.name}
+                  </option>
+                ))}
             </select>
           </div>
           <div className="flex flex-col gap-2">
@@ -719,7 +900,8 @@ export default function Products() {
             <select
               value={draftFilter.stockStatus}
               onChange={(e) => setDraftFilter((f) => ({ ...f, stockStatus: e.target.value }))}
-              className="px-4 py-2.5 bg-white/5 border border-white/[0.08] rounded-xl text-sm text-white focus:outline-none focus:border-[#ff9f43] transition-all"
+              style={{ backgroundColor: "#2d0a1f", color: "#fff" }}
+              className="px-4 py-2.5 bg-white/5 border border-white/8 rounded-xl text-sm text-white focus:outline-none focus:border-[#ff9f43] transition-all"
             >
               <option value="all">All Status</option>
               <option value="instock">In Stock</option>
@@ -732,7 +914,8 @@ export default function Products() {
             <select
               value={draftFilter.flash}
               onChange={(e) => setDraftFilter((f) => ({ ...f, flash: e.target.value }))}
-              className="px-4 py-2.5 bg-white/5 border border-white/[0.08] rounded-xl text-sm text-white focus:outline-none focus:border-[#ff9f43] transition-all"
+              style={{ backgroundColor: "#2d0a1f", color: "#fff" }}
+              className="px-4 py-2.5 bg-white/5 border border-white/8 rounded-xl text-sm text-white focus:outline-none focus:border-[#ff9f43] transition-all"
             >
               <option value="all">All</option>
               <option value="flash">Active Flash Sale</option>
@@ -747,7 +930,7 @@ export default function Products() {
                 placeholder="Min"
                 value={draftFilter.priceMin}
                 onChange={(e) => setDraftFilter((f) => ({ ...f, priceMin: e.target.value }))}
-                className="flex-1 px-4 py-2.5 bg-white/5 border border-white/[0.08] rounded-xl text-sm text-white placeholder-white/30 focus:outline-none focus:border-[#ff9f43] transition-all"
+                className="flex-1 px-4 py-2.5 bg-white/5 border border-white/8 rounded-xl text-sm text-white placeholder-white/30 focus:outline-none focus:border-[#ff9f43] transition-all"
               />
               <span className="text-white/30">-</span>
               <input
@@ -755,7 +938,7 @@ export default function Products() {
                 placeholder="Max"
                 value={draftFilter.priceMax}
                 onChange={(e) => setDraftFilter((f) => ({ ...f, priceMax: e.target.value }))}
-                className="flex-1 px-4 py-2.5 bg-white/5 border border-white/[0.08] rounded-xl text-sm text-white placeholder-white/30 focus:outline-none focus:border-[#ff9f43] transition-all"
+                className="flex-1 px-4 py-2.5 bg-white/5 border border-white/8 rounded-xl text-sm text-white placeholder-white/30 focus:outline-none focus:border-[#ff9f43] transition-all"
               />
             </div>
           </div>
@@ -766,7 +949,7 @@ export default function Products() {
               placeholder="Enter SKU..."
               value={draftFilter.sku}
               onChange={(e) => setDraftFilter((f) => ({ ...f, sku: e.target.value }))}
-              className="px-4 py-2.5 bg-white/5 border border-white/[0.08] rounded-xl text-sm text-white placeholder-white/30 focus:outline-none focus:border-[#ff9f43] transition-all"
+              className="px-4 py-2.5 bg-white/5 border border-white/8 rounded-xl text-sm text-white placeholder-white/30 focus:outline-none focus:border-[#ff9f43] transition-all"
             />
           </div>
           <div className="flex flex-col gap-2">
@@ -775,21 +958,21 @@ export default function Products() {
               type="date"
               value={draftFilter.dateFrom}
               onChange={(e) => setDraftFilter((f) => ({ ...f, dateFrom: e.target.value }))}
-              className="px-4 py-2.5 bg-white/5 border border-white/[0.08] rounded-xl text-sm text-white focus:outline-none focus:border-[#ff9f43] transition-all"
+              className="px-4 py-2.5 bg-white/5 border border-white/8 rounded-xl text-sm text-white focus:outline-none focus:border-[#ff9f43] transition-all"
             />
           </div>
           <div className="flex items-end justify-end gap-3">
             <button
               type="button"
               onClick={resetFilters}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-transparent border border-white/[0.08] text-white/60 text-sm font-semibold hover:border-[#ff9f43] hover:text-[#ff9f43] transition-all"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-transparent border border-white/8 text-white/60 text-sm font-semibold hover:border-[#ff9f43] hover:text-[#ff9f43] transition-all"
             >
               <Undo size={14} /> Reset
             </button>
             <button
               type="button"
               onClick={applyFilters}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#ff9f43] to-[#ffb366] text-[#1a0510] text-sm font-semibold shadow-lg shadow-[#ff9f43]/20 hover:shadow-[#ff9f43]/30 transition-all"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-linear-to-r from-[#ff9f43] to-[#ffb366] text-[#1a0510] text-sm font-semibold shadow-lg shadow-[#ff9f43]/20 hover:shadow-[#ff9f43]/30 transition-all"
             >
               <Filter size={14} /> Apply
             </button>
@@ -798,13 +981,13 @@ export default function Products() {
       </div>
 
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-5">
-        <div className="flex bg-white/5 border border-white/[0.08] rounded-xl p-1">
+        <div className="flex bg-white/5 border border-white/8 rounded-xl p-1">
           <button
             type="button"
             onClick={() => setViewMode("table")}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
               viewMode === "table"
-                ? "bg-gradient-to-r from-[#ff9f43] to-[#ffb366] text-[#1a0510] shadow-lg shadow-[#ff9f43]/20"
+                ? "bg-linear-to-r from-[#ff9f43] to-[#ffb366] text-[#1a0510] shadow-lg shadow-[#ff9f43]/20"
                 : "text-white/50 hover:text-white"
             }`}
           >
@@ -815,7 +998,7 @@ export default function Products() {
             onClick={() => setViewMode("grid")}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
               viewMode === "grid"
-                ? "bg-gradient-to-r from-[#ff9f43] to-[#ffb366] text-[#1a0510] shadow-lg shadow-[#ff9f43]/20"
+                ? "bg-linear-to-r from-[#ff9f43] to-[#ffb366] text-[#1a0510] shadow-lg shadow-[#ff9f43]/20"
                 : "text-white/50 hover:text-white"
             }`}
           >
@@ -826,7 +1009,7 @@ export default function Products() {
             onClick={() => setViewMode("compact")}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
               viewMode === "compact"
-                ? "bg-gradient-to-r from-[#ff9f43] to-[#ffb366] text-[#1a0510] shadow-lg shadow-[#ff9f43]/20"
+                ? "bg-linear-to-r from-[#ff9f43] to-[#ffb366] text-[#1a0510] shadow-lg shadow-[#ff9f43]/20"
                 : "text-white/50 hover:text-white"
             }`}
           >
@@ -834,14 +1017,14 @@ export default function Products() {
           </button>
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
-          <div className="relative flex-1 sm:flex-initial sm:min-w-[200px]">
+          <div className="relative flex-1 sm:flex-initial sm:min-w-50">
             <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" size={16} />
             <input
               type="search"
               placeholder="Search name or SKU..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/5 border border-white/[0.08] text-sm text-white placeholder-white/30 focus:outline-none focus:border-[#ff9f43]"
+              className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/5 border border-white/8 text-sm text-white placeholder-white/30 focus:outline-none focus:border-[#ff9f43]"
             />
           </div>
           <span className="text-sm text-white/50 whitespace-nowrap">
@@ -851,14 +1034,14 @@ export default function Products() {
             type="button"
             disabled={selectedItems.length === 0}
             onClick={() => setDeleteTarget({ type: "bulk", count: selectedItems.length })}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-transparent border border-white/[0.08] text-white/60 text-xs font-semibold hover:border-[#ff4757] hover:text-[#ff4757] transition-all disabled:opacity-30"
+            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-transparent border border-white/8 text-white/60 text-xs font-semibold hover:border-[#ff4757] hover:text-[#ff4757] transition-all disabled:opacity-30"
           >
             <Trash2 size={12} /> Delete
           </button>
           <button
             type="button"
             onClick={handleBulkFlash}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-gradient-to-r from-[#2ed573] to-[#7bed9f] text-[#1a0510] text-xs font-semibold shadow-lg shadow-[#2ed573]/20 hover:shadow-[#2ed573]/30 transition-all"
+            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-linear-to-r from-[#2ed573] to-[#7bed9f] text-[#1a0510] text-xs font-semibold shadow-lg shadow-[#2ed573]/20 hover:shadow-[#2ed573]/30 transition-all"
           >
             <Zap size={12} /> Flash Sale
           </button>
@@ -866,18 +1049,18 @@ export default function Products() {
       </div>
 
       {viewMode === "table" && (
-        <div className="backdrop-blur-sm border border-white/[0.08] rounded-[20px] overflow-hidden">
+        <div className="backdrop-blur-sm border border-white/8 rounded-[20px] overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-white/[0.08]">
+                <tr className="border-b border-white/8">
                   <th className="px-4 py-4 text-left w-12">
                     <button
                       type="button"
                       onClick={toggleSelectAllFiltered}
-                      className={`w-[18px] h-[18px] rounded border-2 flex items-center justify-center transition-all ${
+                      className={`w-4.5 h-4.5 rounded border-2 flex items-center justify-center transition-all ${
                         allFilteredSelected
-                          ? "bg-gradient-to-br from-[#ff9f43] to-[#2ed573] border-transparent"
+                          ? "bg-linear-to-br from-[#ff9f43] to-[#2ed573] border-transparent"
                           : "border-white/30 hover:border-[#ff9f43]"
                       }`}
                     >
@@ -900,12 +1083,6 @@ export default function Products() {
                     Stock
                   </th>
                   <th className="px-4 py-4 text-left text-xs uppercase tracking-wider text-white/50 font-semibold">
-                    Sold
-                  </th>
-                  <th className="px-4 py-4 text-left text-xs uppercase tracking-wider text-white/50 font-semibold">
-                    Rating
-                  </th>
-                  <th className="px-4 py-4 text-left text-xs uppercase tracking-wider text-white/50 font-semibold">
                     Status
                   </th>
                   <th className="px-4 py-4 text-left text-xs uppercase tracking-wider text-white/50 font-semibold">
@@ -920,15 +1097,15 @@ export default function Products() {
                 {paginatedProducts.map((product) => (
                   <tr
                     key={product.id}
-                    className="border-b border-white/[0.08] hover:bg-white/[0.03] hover:border-[#ff9f43]/20 transition-all group"
+                    className="border-b border-white/8 hover:bg-white/3 hover:border-[#ff9f43]/20 transition-all group"
                   >
                     <td className="px-4 py-4">
                       <button
                         type="button"
                         onClick={() => toggleSelect(product.id)}
-                        className={`w-[18px] h-[18px] rounded border-2 flex items-center justify-center transition-all ${
+                        className={`w-4.5 h-4.5 rounded border-2 flex items-center justify-center transition-all ${
                           selectedItems.includes(String(product.id))
-                            ? "bg-gradient-to-br from-[#ff9f43] to-[#2ed573] border-transparent"
+                            ? "bg-linear-to-br from-[#ff9f43] to-[#2ed573] border-transparent"
                             : "border-white/30 hover:border-[#ff9f43]"
                         }`}
                       >
@@ -938,11 +1115,11 @@ export default function Products() {
                       </button>
                     </td>
                     <td className="px-4 py-4">
-                      <div className="flex items-center gap-3 min-w-[220px]">
+                      <div className="flex items-center gap-3 min-w-55">
                         <img
                           src={product.image}
                           alt=""
-                          className="w-12 h-12 rounded-xl object-cover border-2 border-white/[0.08] group-hover:border-[#ff9f43] group-hover:scale-105 transition-all"
+                          className="w-12 h-12 rounded-xl object-cover border-2 border-white/8 group-hover:border-[#ff9f43] group-hover:scale-105 transition-all"
                         />
                         <div>
                           <div className="font-semibold text-sm">{product.name}</div>
@@ -960,14 +1137,7 @@ export default function Products() {
                         <span className="font-bold text-[#2ed573]">৳{product.price}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-4">{getStockBar(product.stock)}</td>
-                    <td className="px-4 py-4 text-white/60">{Number(product.sold || 0).toLocaleString()}</td>
-                    <td className="px-4 py-4">
-                      <div className="flex items-center gap-1">
-                        <Star size={12} className="text-[#ff9f43] fill-[#ff9f43]" />
-                        <span className="font-semibold text-sm">{product.rating ?? 0}</span>
-                      </div>
-                    </td>
+                    <td className="px-4 py-4">{getStockBar(product.stock, product.lowStockThreshold)}</td>
                     <td className="px-4 py-4">{getStatusBadge(product.status)}</td>
                     <td className="px-4 py-4 text-white/50 text-xs">{product.date}</td>
                     <td className="px-4 py-4">
@@ -977,12 +1147,12 @@ export default function Products() {
                           onClick={() =>
                             setDropdownOpen(dropdownOpen === product.id ? null : product.id)
                           }
-                          className="w-8 h-8 rounded-lg bg-white/5 border border-white/[0.08] flex items-center justify-center hover:bg-[#ff9f43]/10 hover:border-[#ff9f43] hover:text-[#ff9f43] transition-all"
+                          className="w-8 h-8 rounded-lg bg-white/5 border border-white/8 flex items-center justify-center hover:bg-[#ff9f43]/10 hover:border-[#ff9f43] hover:text-[#ff9f43] transition-all"
                         >
                           <MoreVertical size={14} />
                         </button>
                         {dropdownOpen === product.id && (
-                          <div className="absolute right-0 top-full mt-2 w-52 bg-[#1a0510]/98 border border-white/[0.08] rounded-xl shadow-2xl z-50 overflow-hidden animate-fadeIn">
+                          <div className="absolute right-0 top-full mt-2 w-52 bg-[#1a0510]/98 border border-white/8 rounded-xl shadow-2xl z-50 overflow-hidden animate-fadeIn">
                             <button
                               type="button"
                               onClick={() => openQuickView(product)}
@@ -1032,7 +1202,7 @@ export default function Products() {
                             >
                               <SearchIcon size={14} /> SEO Settings
                             </button>
-                            <div className="h-px bg-white/[0.08] my-1" />
+                            <div className="h-px bg-white/8 my-1" />
                             <button
                               type="button"
                               onClick={() => {
@@ -1065,7 +1235,7 @@ export default function Products() {
           </div>
           {filteredProducts.length === 0 && !loading && (
             <div className="text-center py-20">
-              <div className="w-28 h-28 mx-auto mb-6 rounded-full bg-white/[0.03] border-2 border-dashed border-white/[0.08] flex items-center justify-center text-4xl text-white/20">
+              <div className="w-28 h-28 mx-auto mb-6 rounded-full bg-white/3 border-2 border-dashed border-white/8 flex items-center justify-center text-4xl text-white/20">
                 <Package size={40} />
               </div>
               <div className="text-xl font-bold mb-2">No products found</div>
@@ -1073,13 +1243,13 @@ export default function Products() {
               <button
                 type="button"
                 onClick={openCreateModal}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#ff9f43] to-[#ffb366] text-[#1a0510] text-sm font-semibold shadow-lg shadow-[#ff9f43]/20"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-linear-to-r from-[#ff9f43] to-[#ffb366] text-[#1a0510] text-sm font-semibold shadow-lg shadow-[#ff9f43]/20"
               >
                 <Plus size={16} /> Add New Product
               </button>
             </div>
           )}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-5 border-t border-white/[0.08]">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-5 border-t border-white/8">
             <div className="text-sm text-white/50">
               Showing{" "}
               <span className="text-white font-semibold">
@@ -1093,18 +1263,18 @@ export default function Products() {
                 type="button"
                 disabled={safePage <= 1}
                 onClick={goPrevPage}
-                className="w-9 h-9 rounded-xl bg-white/5 border border-white/[0.08] flex items-center justify-center text-white/40 hover:border-[#ff9f43] hover:text-[#ff9f43] transition-all disabled:opacity-30"
+                className="w-9 h-9 rounded-xl bg-white/5 border border-white/8 flex items-center justify-center text-white/40 hover:border-[#ff9f43] hover:text-[#ff9f43] transition-all disabled:opacity-30"
               >
                 <ChevronLeft size={14} />
               </button>
-              <span className="text-sm text-white/60 px-2 min-w-[100px] text-center">
+              <span className="text-sm text-white/60 px-2 min-w-25 text-center">
                 Page <span className="text-white font-bold">{safePage}</span> / {totalPages}
               </span>
               <button
                 type="button"
                 disabled={safePage >= totalPages}
                 onClick={goNextPage}
-                className="w-9 h-9 rounded-xl bg-white/5 border border-white/[0.08] flex items-center justify-center text-white/40 hover:border-[#ff9f43] hover:text-[#ff9f43] transition-all disabled:opacity-30"
+                className="w-9 h-9 rounded-xl bg-white/5 border border-white/8 flex items-center justify-center text-white/40 hover:border-[#ff9f43] hover:text-[#ff9f43] transition-all disabled:opacity-30"
               >
                 <ChevronRight size={14} />
               </button>
@@ -1114,7 +1284,7 @@ export default function Products() {
       )}
 
       {viewMode === "grid" && paginatedProducts.length === 0 && !loading && (
-        <div className="text-center py-16 text-white/50 border border-white/[0.08] rounded-[20px]">
+        <div className="text-center py-16 text-white/50 border border-white/8 rounded-[20px]">
           No products match your filters. Try resetting filters or add a product.
         </div>
       )}
@@ -1136,12 +1306,12 @@ export default function Products() {
             return (
               <div
                 key={product.id}
-                className="group bg-[#2d0a1f]/80 backdrop-blur-sm border border-white/[0.08] rounded-[20px] overflow-hidden hover:-translate-y-1.5 hover:border-[#ff9f43]/30 hover:shadow-[0_0_40px_rgba(255,159,67,0.1),0_8px_32px_rgba(0,0,0,0.3)] transition-all duration-300"
+                className="group bg-[#2d0a1f]/80 backdrop-blur-sm border border-white/8 rounded-[20px] overflow-hidden hover:-translate-y-1.5 hover:border-[#ff9f43]/30 hover:shadow-[0_0_40px_rgba(255,159,67,0.1),0_8px_32px_rgba(0,0,0,0.3)] transition-all duration-300"
               >
                 <div className="relative h-52 overflow-hidden">
                   <img src={imgUrl} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                   {pctOff != null && (
-                    <span className="absolute top-3 left-3 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-gradient-to-r from-[#ff9f43]/90 to-[#ffa502]/90 text-[#1a0510]">
+                    <span className="absolute top-3 left-3 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-linear-to-r from-[#ff9f43]/90 to-[#ffa502]/90 text-[#1a0510]">
                       <Zap size={10} /> -{pctOff}%
                     </span>
                   )}
@@ -1149,21 +1319,21 @@ export default function Products() {
                     <button
                       type="button"
                       onClick={() => openQuickView(product)}
-                      className="w-9 h-9 rounded-xl bg-[#1a0510]/80 backdrop-blur-sm border border-white/[0.08] flex items-center justify-center hover:bg-[#ff9f43] hover:border-[#ff9f43] hover:text-[#1a0510] transition-all"
+                      className="w-9 h-9 rounded-xl bg-[#1a0510]/80 backdrop-blur-sm border border-white/8 flex items-center justify-center hover:bg-[#ff9f43] hover:border-[#ff9f43] hover:text-[#1a0510] transition-all"
                     >
                       <Eye size={14} />
                     </button>
                     <button
                       type="button"
                       onClick={() => openEditModal(product)}
-                      className="w-9 h-9 rounded-xl bg-[#1a0510]/80 backdrop-blur-sm border border-white/[0.08] flex items-center justify-center hover:bg-[#ff9f43] hover:border-[#ff9f43] hover:text-[#1a0510] transition-all"
+                      className="w-9 h-9 rounded-xl bg-[#1a0510]/80 backdrop-blur-sm border border-white/8 flex items-center justify-center hover:bg-[#ff9f43] hover:border-[#ff9f43] hover:text-[#1a0510] transition-all"
                     >
                       <Edit size={14} />
                     </button>
                     <button
                       type="button"
                       onClick={() => void patchProduct(product.id, { featured: !product.featured })}
-                      className={`w-9 h-9 rounded-xl bg-[#1a0510]/80 backdrop-blur-sm border border-white/[0.08] flex items-center justify-center transition-all ${
+                      className={`w-9 h-9 rounded-xl bg-[#1a0510]/80 backdrop-blur-sm border border-white/8 flex items-center justify-center transition-all ${
                         product.featured
                           ? "text-[#ff4757] border-[#ff4757]"
                           : "hover:bg-[#ff4757] hover:border-[#ff4757] hover:text-white"
@@ -1179,9 +1349,8 @@ export default function Products() {
                   </div>
                   <h3 className="font-bold text-base mb-3 line-clamp-1">{product.name}</h3>
                   <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-1 text-sm">
-                      <Star size={12} className="text-[#ff9f43] fill-[#ff9f43]" />
-                      <span>{product.rating ?? 0}</span>
+                    <div className="text-xs text-white/45 line-clamp-2 max-w-[55%]">
+                      {product.variant || "—"}
                     </div>
                     <div
                       className={`text-xs flex items-center gap-1 ${
@@ -1202,7 +1371,7 @@ export default function Products() {
                       {product.stock} left
                     </div>
                   </div>
-                  <div className="flex items-center justify-between pt-4 border-t border-white/[0.08]">
+                  <div className="flex items-center justify-between pt-4 border-t border-white/8">
                     <div className="flex items-baseline gap-2">
                       <span className="text-xl font-extrabold text-[#2ed573]">৳{product.price}</span>
                       {product.originalPrice != null && (
@@ -1212,7 +1381,7 @@ export default function Products() {
                     <button
                       type="button"
                       onClick={() => openEditModal(product)}
-                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#ff9f43] to-[#ffb366] text-[#1a0510] text-xs font-bold hover:shadow-lg hover:shadow-[#ff9f43]/30 transition-all"
+                      className="px-4 py-2 rounded-xl bg-linear-to-r from-[#ff9f43] to-[#ffb366] text-[#1a0510] text-xs font-bold hover:shadow-lg hover:shadow-[#ff9f43]/30 transition-all"
                     >
                       Edit
                     </button>
@@ -1225,7 +1394,7 @@ export default function Products() {
       )}
 
       {viewMode === "compact" && paginatedProducts.length === 0 && !loading && (
-        <div className="text-center py-16 text-white/50 border border-white/[0.08] rounded-[20px]">
+        <div className="text-center py-16 text-white/50 border border-white/8 rounded-[20px]">
           No products match your filters.
         </div>
       )}
@@ -1235,14 +1404,14 @@ export default function Products() {
           {paginatedProducts.map((product) => (
             <div
               key={product.id}
-              className="flex items-center gap-4 p-4 bg-[#2d0a1f]/80 backdrop-blur-sm border border-white/[0.08] rounded-xl hover:border-[#ff9f43]/20 hover:bg-[#4a0e2e]/90 transition-all"
+              className="flex items-center gap-4 p-4 bg-[#2d0a1f]/80 backdrop-blur-sm border border-white/8 rounded-xl hover:border-[#ff9f43]/20 hover:bg-[#4a0e2e]/90 transition-all"
             >
               <button
                 type="button"
                 onClick={() => toggleSelect(product.id)}
-                className={`w-[18px] h-[18px] rounded border-2 flex items-center justify-center transition-all flex-shrink-0 ${
+                className={`w-4.5 h-4.5 rounded border-2 flex items-center justify-center transition-all shrink-0 ${
                   selectedItems.includes(String(product.id))
-                    ? "bg-gradient-to-br from-[#ff9f43] to-[#2ed573] border-transparent"
+                    ? "bg-linear-to-br from-[#ff9f43] to-[#2ed573] border-transparent"
                     : "border-white/30 hover:border-[#ff9f43]"
                 }`}
               >
@@ -1253,22 +1422,19 @@ export default function Products() {
               <img
                 src={product.image}
                 alt=""
-                className="w-14 h-14 rounded-xl object-cover border-2 border-white/[0.08] flex-shrink-0"
+                className="w-14 h-14 rounded-xl object-cover border-2 border-white/8 shrink-0"
               />
               <div className="flex-1 min-w-0">
                 <div className="font-semibold text-sm truncate">
                   {product.name} - {product.variant || "—"}
                 </div>
-                <div className="flex items-center gap-3 text-xs text-white/50 mt-1">
+                <div className="flex items-center gap-3 text-xs text-white/50 mt-1 flex-wrap">
                   <span>SKU: {product.sku}</span>
                   <span>{product.categoryLabel}</span>
-                  <span className="flex items-center gap-1">
-                    <Star size={10} className="text-[#ff9f43] fill-[#ff9f43]" /> {product.rating ?? 0}
-                  </span>
                 </div>
               </div>
               <div className="hidden sm:block">{getStatusBadge(product.status)}</div>
-              <div className="font-bold text-[#2ed573] min-w-[60px] text-right">৳{product.price}</div>
+              <div className="font-bold text-[#2ed573] min-w-15 text-right">৳{product.price}</div>
               <button
                 type="button"
                 onClick={() => openEditModal(product)}
@@ -1282,61 +1448,153 @@ export default function Products() {
       )}
 
       {productModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="bg-[#2d0a1f] border border-white/[0.12] rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl">
-            <div className="sticky top-0 flex items-center justify-between px-6 py-4 border-b border-white/[0.08] bg-[#2d0a1f]/95">
-              <h2 className="text-lg font-bold text-white">{editingId ? "Edit Product" : "Add Product"}</h2>
+        <div className="fixed inset-0 z-100 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md">
+          <div className="relative w-full max-w-2xl max-h-[92vh] flex flex-col rounded-3xl border border-white/12 bg-linear-to-b from-[#3d1430] via-[#2d0a1f] to-[#1a0510] shadow-[0_0_0_1px_rgba(255,159,67,0.06),0_25px_80px_rgba(0,0,0,0.55),0_0_120px_rgba(255,159,67,0.12)] overflow-hidden">
+            <div
+              className="pointer-events-none absolute inset-0 opacity-[0.07]"
+              style={{
+                backgroundImage: "radial-gradient(circle at 20% 0%, #ff9f43 0%, transparent 45%)",
+              }}
+            />
+            <div className="relative shrink-0 flex items-start gap-4 px-6 pt-6 pb-4 border-b border-white/8 bg-black/20">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-linear-to-br from-[#ff9f43] to-[#ffb366] text-[#1a0510] shadow-lg shadow-[#ff9f43]/25">
+                <Package size={22} strokeWidth={2.2} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h2 className="text-xl font-extrabold text-white tracking-tight mt-0.5">
+                  {editingId ? "Edit product" : "Add product"}
+                </h2>
+                
+              </div>
               <button
                 type="button"
                 onClick={() => {
                   setProductModalOpen(false);
                   setEditingId(null);
-                  setImageUrlDraft("");
                 }}
-                className="p-2 rounded-lg hover:bg-white/10 text-white/60"
+                className="p-2.5 rounded-xl hover:bg-white/10 text-white/55 hover:text-white transition-colors"
+                aria-label="Close"
               >
-                <X size={18} />
+                <X size={20} />
               </button>
             </div>
-            <div className="p-6 space-y-4">
+
+            <div className="relative flex-1 overflow-y-auto scrollbar-none px-6 py-5 space-y-5">
               <div>
-                <label className="text-xs text-white/50">Name *</label>
+                <label className="text-[11px] font-semibold uppercase tracking-wide text-white/45">Prodcut Titel *</label>
                 <input
                   value={form.name}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                  className="mt-1 w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/[0.08] text-white text-sm focus:border-[#ff9f43] outline-none"
+                  onChange={(e) =>{
+                    const name = e.target.value;
+                    setForm((f) => ({ 
+                      ...f, 
+                      name,  
+                      sku: !editingId ? generateSku(name) : f.sku,
+                    }));
+                  }}
+                  className="mt-1.5 w-full px-4 py-3 rounded-2xl bg-white/6 border border-white/10 text-white text-sm placeholder-white/25 focus:border-[#ff9f43] focus:ring-2 focus:ring-[#ff9f43]/20 outline-none transition-all"
+                  placeholder="Product name"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-white/50">SKU *</label>
+
+              <div>
+                <label className="text-[11px] font-semibold uppercase tracking-wide text-white/45">SKU *</label>
+                <div className="relative mt-1.5">
                   <input
                     value={form.sku}
                     onChange={(e) => setForm((f) => ({ ...f, sku: e.target.value }))}
-                    className="mt-1 w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/[0.08] text-white text-sm focus:border-[#ff9f43] outline-none"
+                    className="mt-1.5 w-full px-4 py-3 rounded-2xl bg-white/6 border border-white/10 text-white text-sm focus:border-[#ff9f43] focus:ring-2 focus:ring-[#ff9f43]/20 outline-none transition-all"
+                    placeholder="Unique SKU"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, sku: generateSku(f.name) }))}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-xl bg-[#ff9f43]/15 text-[#ff9f43] text-[11px] font-bold hover:bg-[#ff9f43]/25 transition-all cursor-pointer"
+                  >
+                    Generate
+                  </button>
                 </div>
-                <div>
-                  <label className="text-xs text-white/50">Variant</label>
-                  <input
-                    value={form.variant}
-                    onChange={(e) => setForm((f) => ({ ...f, variant: e.target.value }))}
-                    className="mt-1 w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/[0.08] text-white text-sm focus:border-[#ff9f43] outline-none"
-                  />
+                
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                  <div className="flex items-center gap-2">
+                    <Layers size={16} className="text-[#ff9f43]" />
+                    <span className="text-sm font-bold text-white">Variants</span>
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-white/10 text-white/55">
+                      {(form.variationIds || []).length} selected
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setAllVariations(true)}
+                      className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-white/5 text-[#ff9f43] hover:bg-[#ff9f43]/15 border border-[#ff9f43]/25 cursor-pointer"
+                    >
+                      All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAllVariations(false)}
+                      className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-white/5 text-white/50 hover:bg-white/10 border border-white/10 cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+                <div className="max-h-48 overflow-y-auto rounded-xl border border-white/8 bg-[#1a0510]/60 divide-y divide-white/6">
+                  {variationCatalog.length === 0 ? (
+                    <div className="p-6 text-center text-sm text-white/40">
+                      কোনো ভ্যারিয়েশন নেই। আগে{" "}
+                      <button
+                        type="button"
+                        className="text-[#ff9f43] font-semibold underline-offset-2 hover:underline"
+                        onClick={() => {
+                          navigate("/admin/product-variations");
+                          setProductModalOpen(false);
+                        }}
+                      >
+                        Variations
+                      </button>{" "}
+                      পেজে তৈরি করুন।
+                    </div>
+                  ) : (
+                    variationCatalog.map((v) => {
+                      const id = String(v._id);
+                      const checked = (form.variationIds || []).map(String).includes(id);
+                      return (
+                        <label
+                          key={id}
+                          className={`flex items-start gap-3 px-3 py-2.5 cursor-pointer hover:bg-white/4 transition-colors ${checked ? "bg-[#ff9f43]/8" : ""}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleVariationId(id)}
+                            className="mt-1 rounded border-white/25 text-[#ff9f43] focus:ring-[#ff9f43]"
+                          />
+                          <span className="text-sm text-white/85 leading-snug">{formatVariationOptionLabel(v)}</span>
+                        </label>
+                      );
+                    })
+                  )}
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs text-white/50">Category</label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wide text-white/45">Category</label>
                   <select
                     value={form.category}
                     onChange={(e) =>
                       setForm((f) => ({ ...f, category: e.target.value, subCategory: "" }))
                     }
-                    className="mt-1 w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/[0.08] text-white text-sm focus:border-[#ff9f43] outline-none"
+                    style={{ backgroundColor: "#2d0a1f", color: "#fff" }}
+                    className="mt-1.5 w-full px-4 py-3 rounded-2xl bg-white/6 border border-white/10 text-white text-sm focus:border-[#ff9f43] outline-none"
                   >
                     <option value="">—</option>
-                    {categories.map((c) => (
+                    {categoriesActive.map((c) => (
                       <option key={c._id} value={c._id} className="bg-[#1a0510]">
                         {c.name}
                       </option>
@@ -1344,13 +1602,19 @@ export default function Products() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs text-white/50">Subcategory</label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
+                    Subcategory
+                  </label>
                   <select
                     value={form.subCategory}
+                    disabled={!form.category}
                     onChange={(e) => setForm((f) => ({ ...f, subCategory: e.target.value }))}
-                    className="mt-1 w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/[0.08] text-white text-sm focus:border-[#ff9f43] outline-none"
+                    style={{ backgroundColor: "#2d0a1f", color: "#fff" }}
+                    className="mt-1.5 w-full px-4 py-3 rounded-2xl bg-white/6 border border-white/10 text-white text-sm focus:border-[#ff9f43] outline-none disabled:opacity-45"
                   >
-                    <option value="">—</option>
+                    <option value="">
+                      {form.category ? "—" : "প্রথমে ক্যাটাগরি বেছে নিন"}
+                    </option>
                     {formSubCategories.map((s) => (
                       <option key={s._id} value={s._id} className="bg-[#1a0510]">
                         {s.name}
@@ -1359,101 +1623,110 @@ export default function Products() {
                   </select>
                 </div>
               </div>
-              <div>
-                <label className="text-xs text-white/50">Brand</label>
-                <input
-                  value={form.brand}
-                  onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))}
-                  className="mt-1 w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/[0.08] text-white text-sm focus:border-[#ff9f43] outline-none"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs text-white/50">Price (৳) *</label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
+                    Discount Price (৳) *
+                  </label>
                   <input
                     type="number"
                     min="0"
                     step="0.01"
                     value={form.price}
                     onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
-                    className="mt-1 w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/[0.08] text-white text-sm focus:border-[#ff9f43] outline-none"
+                    className="mt-1.5 w-full px-4 py-3 rounded-2xl bg-white/6 border border-white/10 text-white text-sm focus:border-[#ff9f43] outline-none"
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-white/50">Original price</label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
+                    Original price (৳)
+                  </label>
                   <input
                     type="number"
                     min="0"
                     step="0.01"
                     value={form.originalPrice}
                     onChange={(e) => setForm((f) => ({ ...f, originalPrice: e.target.value }))}
-                    className="mt-1 w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/[0.08] text-white text-sm focus:border-[#ff9f43] outline-none"
+                    className="mt-1.5 w-full px-4 py-3 rounded-2xl bg-white/6 border border-white/10 text-white text-sm focus:border-[#ff9f43] outline-none"
+                    placeholder="Optional"
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-3">
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs text-white/50">Stock</label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wide text-white/45">Stock</label>
                   <input
                     type="number"
                     min="0"
                     value={form.stock}
                     onChange={(e) => setForm((f) => ({ ...f, stock: e.target.value }))}
-                    className="mt-1 w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/[0.08] text-white text-sm focus:border-[#ff9f43] outline-none"
+                    className="mt-1.5 w-full px-4 py-3 rounded-2xl bg-white/6 border border-white/10 text-white text-sm focus:border-[#ff9f43] outline-none"
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-white/50">Sold</label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
+                    Min. stock alert
+                  </label>
+                  <p className="text-[10px] text-white/35 mt-0.5 mb-1">
+                    স্টক এই সংখ্যার নিচে নামলে সতর্কতা দেখাবে
+                  </p>
                   <input
                     type="number"
                     min="0"
-                    value={form.sold}
-                    onChange={(e) => setForm((f) => ({ ...f, sold: e.target.value }))}
-                    className="mt-1 w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/[0.08] text-white text-sm focus:border-[#ff9f43] outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-white/50">Rating</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="5"
-                    step="0.1"
-                    value={form.rating}
-                    onChange={(e) => setForm((f) => ({ ...f, rating: e.target.value }))}
-                    className="mt-1 w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/[0.08] text-white text-sm focus:border-[#ff9f43] outline-none"
+                    value={form.lowStockThreshold}
+                    onChange={(e) => setForm((f) => ({ ...f, lowStockThreshold: e.target.value }))}
+                    className="w-full px-4 py-3 rounded-2xl bg-white/6 border border-white/10 text-white text-sm focus:border-[#a55eea] outline-none"
+                    placeholder="e.g. 10"
                   />
                 </div>
               </div>
+
               <div>
-                <label className="text-xs text-white/50">Status</label>
-                <select
-                  value={form.status}
-                  onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
-                  className="mt-1 w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/[0.08] text-white text-sm focus:border-[#ff9f43] outline-none"
-                >
-                  <option value="active">Active</option>
-                  <option value="flash">Flash sale</option>
-                  <option value="outstock">Out of stock</option>
-                  <option value="draft">Draft</option>
-                </select>
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  id="feat"
-                  type="checkbox"
-                  checked={form.featured}
-                  onChange={(e) => setForm((f) => ({ ...f, featured: e.target.checked }))}
-                  className="rounded border-white/20"
+                <label className="text-[11px] font-semibold uppercase tracking-wide text-white/45 mb-1.5 block">
+                  Description
+                </label>
+                <ProductDescriptionEditor
+                  mountKey={descriptionEditorKey}
+                  value={form.description}
+                  onChange={(html) => setForm((f) => ({ ...f, description: html }))}
                 />
-                <label htmlFor="feat" className="text-sm text-white/70">
-                  Featured (heart on grid)
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+                <div>
+                  <label className="text-[11px] font-semibold uppercase tracking-wide text-white/45">Status</label>
+                  <select
+                    value={form.status}
+                    onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
+                    style={{ backgroundColor: "#2d0a1f", color: "#fff" }}
+                    className="mt-1.5 w-full px-4 py-3 rounded-2xl bg-white/6 border border-white/10 text-white text-sm focus:border-[#ff9f43] outline-none"
+                  >
+                    <option value="active">Active</option>
+                    <option value="flash">Flash sale</option>
+                    <option value="outstock">Out of stock</option>
+                    <option value="draft">Draft</option>
+                  </select>
+                </div>
+                <label className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-white/4 border border-white/8 cursor-pointer">
+                  <input
+                    id="feat"
+                    type="checkbox"
+                    checked={form.featured}
+                    onChange={(e) => setForm((f) => ({ ...f, featured: e.target.checked }))}
+                    className="rounded border-white/25 text-[#ff9f43] focus:ring-[#ff9f43]"
+                  />
+                  <span className="text-sm text-white/75">Featured (heart on grid)</span>
                 </label>
               </div>
-              <div>
-                <label className="text-xs font-medium text-white/50">Images</label>
+
+              <div className="rounded-2xl border border-dashed border-[#ff9f43]/25 bg-linear-to-br from-[#ff9f43]/[0.07] to-transparent p-5">
+                <label className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
+                  Product images
+                </label>
                 <p className="text-[11px] text-white/40 mt-1 leading-relaxed">
-                  প্রথম ছবি থাম্বনেইল হবে। একাধিক ছবি একসাথে বেছে নিতে পারবেন; প্রিভিউ নিচে দেখাবে।
+                  প্রথম ছবি থাম্বনেইল। শুধু ডিভাইস থেকে ছবি — URL ব্যবহার করা যাবে না।
                 </p>
                 <input
                   ref={imageFileInputRef}
@@ -1463,54 +1736,38 @@ export default function Products() {
                   className="hidden"
                   onChange={handleImageFiles}
                 />
-                <div className="flex flex-wrap gap-2 mt-3">
-                  <button
-                    type="button"
-                    onClick={() => imageFileInputRef.current?.click()}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 border border-white/[0.08] text-white/80 text-sm font-semibold hover:border-[#ff9f43] hover:text-[#ff9f43] transition-all"
-                  >
-                    <ImagePlus size={18} /> ছবি নির্বাচন করুন
-                  </button>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-2 mt-3">
-                  <input
-                    type="url"
-                    value={imageUrlDraft}
-                    onChange={(e) => setImageUrlDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        addImageUrlFromDraft();
-                      }
-                    }}
-                    placeholder="ইমেজ URL যোগ করুন…"
-                    className="flex-1 px-4 py-2.5 rounded-xl bg-white/5 border border-white/[0.08] text-white text-sm focus:border-[#ff9f43] outline-none placeholder-white/30"
-                  />
-                  <button
-                    type="button"
-                    onClick={addImageUrlFromDraft}
-                    className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#ff9f43]/20 to-[#ffb366]/20 border border-[#ff9f43]/30 text-[#ffb366] text-sm font-semibold hover:from-[#ff9f43]/30 hover:to-[#ffb366]/30 transition-all"
-                  >
-                    URL যোগ
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => imageFileInputRef.current?.click()}
+                  className="mt-4 group relative w-full overflow-hidden rounded-2xl border-2 border-[#ff9f43]/35 bg-linear-to-r from-[#ff9f43]/20 via-[#ffb366]/15 to-[#ff9f43]/10 px-6 py-4 text-left shadow-inner shadow-black/20 transition-all hover:border-[#ff9f43]/60 hover:shadow-[0_0_40px_rgba(255,159,67,0.15)] cursor-pointer"
+                >
+                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-linear-to-r from-[#ff9f43]/10 to-transparent pointer-events-none" />
+                  <div className="relative flex items-center justify-center gap-3">
+                    <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-linear-to-br from-[#ff9f43] to-[#ffb366] text-[#1a0510] shadow-lg">
+                      <Sparkles size={22} />
+                    </span>
+                    <div>
+                      <span className="block text-base font-bold text-white group-hover:text-[#ffb366] transition-colors">
+                        ছবি নির্বাচন করুন
+                      </span>
+                      <span className="text-xs text-white/45">এক বা একাধিক ফাইল · JPG, PNG, WebP</span>
+                    </div>
+                    <ImagePlus size={24} className="text-[#ff9f43] ml-auto shrink-0 opacity-90" />
+                  </div>
+                </button>
                 {form.imageUrls.length > 0 ? (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-4">
                     {form.imageUrls.map((url, idx) => (
                       <div
                         key={`${idx}-${url.slice(0, 48)}`}
-                        className="relative group rounded-xl border border-white/[0.1] overflow-hidden bg-black/20"
+                        className="relative group rounded-xl border border-white/10 overflow-hidden bg-black/20"
                       >
                         {idx === 0 && (
                           <span className="absolute top-2 left-2 z-10 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wide bg-[#ff9f43] text-[#1a0510]">
                             Thumbnail
                           </span>
                         )}
-                        <img
-                          src={url}
-                          alt=""
-                          className="w-full aspect-square object-cover"
-                        />
+                        <img src={url} alt="" className="w-full aspect-square object-cover" />
                         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 flex-wrap p-2">
                           <button
                             type="button"
@@ -1543,21 +1800,21 @@ export default function Products() {
                     ))}
                   </div>
                 ) : (
-                  <div className="mt-4 py-8 rounded-xl border border-dashed border-white/15 text-center text-white/35 text-sm">
-                    কোনো ছবি নেই — ডিভাইস থেকে বেছে নিন বা URL দিন।
+                  <div className="mt-4 py-10 rounded-xl border border-white/6 bg-black/20 text-center text-sm text-white/35">
+                    কোনো ছবি নেই — উপরের বাটনে ক্লিক করে যোগ করুন
                   </div>
                 )}
               </div>
             </div>
-            <div className="sticky bottom-0 flex gap-3 justify-end px-6 py-4 border-t border-white/[0.08] bg-[#2d0a1f]/95">
+
+            <div className="relative shrink-0 flex gap-3 justify-end px-6 py-4 border-t border-white/8 bg-black/30">
               <button
                 type="button"
                 onClick={() => {
                   setProductModalOpen(false);
                   setEditingId(null);
-                  setImageUrlDraft("");
                 }}
-                className="px-5 py-2.5 rounded-xl border border-white/[0.08] text-white/70 text-sm font-semibold hover:bg-white/5"
+                className="px-5 py-2.5 rounded-xl cursor-pointer border border-white/12 text-white/75 text-sm font-semibold hover:bg-white/5"
               >
                 Cancel
               </button>
@@ -1565,7 +1822,7 @@ export default function Products() {
                 type="button"
                 disabled={saving}
                 onClick={() => void handleSaveProduct()}
-                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#ff9f43] to-[#ffb366] text-[#1a0510] text-sm font-bold disabled:opacity-50"
+                className="px-6 py-2.5 rounded-xl cursor-pointer bg-linear-to-r from-[#ff9f43] to-[#ffb366] text-[#1a0510] text-sm font-bold shadow-lg shadow-[#ff9f43]/25 hover:shadow-[#ff9f43]/40 disabled:opacity-50"
               >
                 {saving ? "Saving…" : editingId ? "Update" : "Create"}
               </button>
@@ -1575,9 +1832,9 @@ export default function Products() {
       )}
 
       {quickViewProduct && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="bg-[#2d0a1f] border border-white/[0.12] rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.08]">
+        <div className="fixed inset-0 z-100 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="bg-[#2d0a1f] border border-white/12 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/8">
               <h2 className="text-lg font-bold text-white">Quick view</h2>
               <button
                 type="button"
@@ -1589,7 +1846,7 @@ export default function Products() {
             </div>
             <div className="p-6 grid md:grid-cols-2 gap-6">
               <div>
-                <div className="aspect-square rounded-xl overflow-hidden border border-white/[0.08] mb-3">
+                <div className="aspect-square rounded-xl overflow-hidden border border-white/8 mb-3">
                   <img
                     src={galleryFor(quickViewProduct)[activeImage] || PLACEHOLDER_IMG}
                     alt=""
@@ -1626,15 +1883,20 @@ export default function Products() {
                   )}
                 </div>
                 <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="bg-white/5 rounded-xl p-3 border border-white/[0.08]">
+                  <div className="bg-white/5 rounded-xl p-3 border border-white/8">
                     <div className="text-white/40 text-xs">Stock</div>
                     <div className="font-bold">{quickViewProduct.stock}</div>
                   </div>
-                  <div className="bg-white/5 rounded-xl p-3 border border-white/[0.08]">
-                    <div className="text-white/40 text-xs">Sold</div>
-                    <div className="font-bold">{quickViewProduct.sold ?? 0}</div>
+                  <div className="bg-white/5 rounded-xl p-3 border border-white/8">
+                    <div className="text-white/40 text-xs">Min. stock alert</div>
+                    <div className="font-bold">{quickViewProduct.lowStockThreshold ?? "—"}</div>
                   </div>
                 </div>
+                {stripHtml(quickViewProduct.description) ? (
+                  <p className="text-sm text-white/55 line-clamp-4 border-l-2 border-[#ff9f43]/50 pl-3">
+                    {stripHtml(quickViewProduct.description)}
+                  </p>
+                ) : null}
                 <div className="flex gap-2 pt-2">
                   <button
                     type="button"
@@ -1642,14 +1904,14 @@ export default function Products() {
                       openEditModal(quickViewProduct);
                       setQuickViewProduct(null);
                     }}
-                    className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[#ff9f43] to-[#ffb366] text-[#1a0510] text-sm font-bold"
+                    className="flex-1 py-2.5 rounded-xl bg-linear-to-r from-[#ff9f43] to-[#ffb366] text-[#1a0510] text-sm font-bold"
                   >
                     Edit
                   </button>
                   <button
                     type="button"
                     onClick={() => setQuickViewProduct(null)}
-                    className="px-4 py-2.5 rounded-xl border border-white/[0.08] text-white/70 text-sm"
+                    className="px-4 py-2.5 rounded-xl border border-white/8 text-white/70 text-sm"
                   >
                     Close
                   </button>
@@ -1661,9 +1923,9 @@ export default function Products() {
       )}
 
       {seoProduct && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="bg-[#2d0a1f] border border-white/[0.12] rounded-2xl max-w-md w-full shadow-2xl">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.08]">
+        <div className="fixed inset-0 z-100  flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="bg-[#2d0a1f] border border-white/12 rounded-2xl max-w-md w-full shadow-2xl">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/8">
               <h2 className="text-lg font-bold text-white">SEO settings</h2>
               <button
                 type="button"
@@ -1679,7 +1941,7 @@ export default function Products() {
                 <input
                   value={seoProduct.seoTitle}
                   onChange={(e) => setSeoProduct((s) => ({ ...s, seoTitle: e.target.value }))}
-                  className="mt-1 w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/[0.08] text-white text-sm outline-none focus:border-[#ff9f43]"
+                  className="mt-1 w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/8 text-white text-sm outline-none focus:border-[#ff9f43]"
                 />
               </div>
               <div>
@@ -1688,22 +1950,22 @@ export default function Products() {
                   value={seoProduct.seoDescription}
                   onChange={(e) => setSeoProduct((s) => ({ ...s, seoDescription: e.target.value }))}
                   rows={4}
-                  className="mt-1 w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/[0.08] text-white text-sm outline-none focus:border-[#ff9f43] resize-none"
+                  className="mt-1 w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/8 text-white text-sm outline-none focus:border-[#ff9f43] resize-none"
                 />
               </div>
             </div>
-            <div className="flex gap-3 justify-end px-6 py-4 border-t border-white/[0.08]">
+            <div className="flex gap-3 justify-end px-6 py-4 border-t border-white/8">
               <button
                 type="button"
                 onClick={() => setSeoProduct(null)}
-                className="px-4 py-2 rounded-xl border border-white/[0.08] text-white/70 text-sm"
+                className="px-4 py-2 rounded-xl border border-white/8 text-white/70 text-sm"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => void saveSeo()}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#ff9f43] to-[#ffb366] text-[#1a0510] text-sm font-bold"
+                className="px-4 py-2 rounded-xl bg-linear-to-r from-[#ff9f43] to-[#ffb366] text-[#1a0510] text-sm font-bold"
               >
                 Save
               </button>
@@ -1713,8 +1975,8 @@ export default function Products() {
       )}
 
       {deleteTarget && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="bg-[#2d0a1f] border border-white/[0.12] rounded-2xl max-w-sm w-full shadow-2xl p-6">
+        <div className="fixed inset-0 z-100  flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="bg-[#2d0a1f] border border-white/12 rounded-2xl max-w-sm w-full shadow-2xl p-6">
             <h3 className="text-lg font-bold text-white mb-2">Confirm delete</h3>
             <p className="text-white/60 text-sm mb-6">
               {deleteTarget.type === "bulk"
@@ -1725,7 +1987,7 @@ export default function Products() {
               <button
                 type="button"
                 onClick={() => setDeleteTarget(null)}
-                className="px-4 py-2 rounded-xl border border-white/[0.08] text-white/70 text-sm"
+                className="px-4 py-2 rounded-xl border border-white/8 text-white/70 text-sm"
               >
                 Cancel
               </button>
