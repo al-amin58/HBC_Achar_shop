@@ -9,6 +9,7 @@ import CategoryRoutes from "./routes/categoryRoutes.js";
 import SubCategoryRoutes from "./routes/subCategoryRoutes.js";
 import ProductAttributeRoutes from "./routes/productAttributeRoutes.js";
 import ProductVariationRoutes from "./routes/productVariationRoutes.js";
+import ProductRoutes from "./routes/productRoutes.js";
 
 dotenv.config();
 
@@ -27,6 +28,7 @@ app.use('/api/categories', CategoryRoutes);
 app.use('/api/subcategories', SubCategoryRoutes);
 app.use('/api/product-attributes', ProductAttributeRoutes);
 app.use('/api/product-variations', ProductVariationRoutes);
+app.use('/api/products', ProductRoutes);
 app.use('/api/auth', authRoutes);
 
 const startServer = async () => {

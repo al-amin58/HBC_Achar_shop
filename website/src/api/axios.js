@@ -9,6 +9,7 @@ const ADMIN_ROUTE_PREFIXES = [
     '/subcategories',
     '/product-attributes',
     '/product-variations',
+    '/products',
     '/auth/admin',
 ];
 
