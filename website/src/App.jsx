@@ -31,6 +31,9 @@ import Category from "./pages/admin/Categoriespage.jsx";
 import SubCategories from "./pages/admin/SubCategoriespage.jsx";
 import Variations from "./pages/admin/Variationspage.jsx";
 import Products from "./pages/admin/Products.jsx";
+import Customers from "./pages/admin/Customers.jsx";
+import Setting from "./pages/admin/Setting.jsx";
+import Orders from "./pages/admin/Orders.jsx";
 
 
 const router = createBrowserRouter([
@@ -105,6 +108,9 @@ const router = createBrowserRouter([
           {  path: "sub-categories",element: <SubCategories />},
           {  path: "product-variations",element: <Variations />},
           {  path: "products",element: <Products />},
+          {  path: "orders", element:<Orders/>},
+          {  path: "settings", element:<Setting/>},
+          {  path: "customers", element:<Customers/>}
         ]
       },
     ],

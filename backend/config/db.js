@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-const DEFAULT_MONGO_URI = "mongodb://127.0.0.1:27017/hbc_acher";
+const DEFAULT_MONGO_URI = "mongodb://localhost:27017/hbc_acher";
 
 const connectDB = async () => {
   const mongoUri = process.env.MONGO_URI || DEFAULT_MONGO_URI;
