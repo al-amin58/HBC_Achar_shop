@@ -10,15 +10,34 @@ import SubCategoryRoutes from "./routes/subCategoryRoutes.js";
 import ProductAttributeRoutes from "./routes/productAttributeRoutes.js";
 import ProductVariationRoutes from "./routes/productVariationRoutes.js";
 import ProductRoutes from "./routes/productRoutes.js";
+import CustomerRoutes from "./routes/customers.js";
+import SettingsRoutes from "./routes/settingsRoutes.js";
+import HomeRoutes from "./routes/homeRoutes.js";
+import CartRoutes from "./routes/cartRoutes.js";
+import OrderRoutes from "./routes/orderRoutes.js";
 
 
 dotenv.config();
 
 const app = express();
 
+const isAllowedOrigin = (origin) => {
+  try {
+    const u = new URL(origin);
+    return u.protocol === "http:" && (u.hostname === "localhost" || u.hostname === "127.0.0.1");
+  } catch {
+    return false;
+  }
+};
+
 app.use(cors({
-    origin: "http://localhost:5173",
-    credentials: true
+  origin(origin, callback) {
+    if (!origin || isAllowedOrigin(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error(`CORS blocked for origin: ${origin}`));
+  },
+  credentials: true,
 }));
 
 app.use(express.json({limit: "20mb"}));
@@ -31,6 +50,11 @@ app.use('/api/subcategories', SubCategoryRoutes);
 app.use('/api/product-attributes', ProductAttributeRoutes);
 app.use('/api/product-variations', ProductVariationRoutes);
 app.use('/api/products', ProductRoutes);
+app.use('/api/customers', CustomerRoutes);
+app.use('/api/settings', SettingsRoutes);
+app.use('/api/home', HomeRoutes);
+app.use('/api/cart', CartRoutes);
+app.use('/api/orders', OrderRoutes);
 
 app.use('/api/auth', authRoutes);
 

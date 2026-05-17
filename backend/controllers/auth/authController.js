@@ -1,4 +1,5 @@
 import User from '../../models/User.js';
+import Order from '../../models/Order.js';
 import bcrypt from 'bcryptjs';
 import validator from 'validator';
 import jwt from 'jsonwebtoken';
@@ -102,8 +103,45 @@ export const loginUser = async (req, res) => {
     }
 };
 
+/** GET /api/auth/me — logged-in customer profile */
+export const getMe = async (req, res) => {
+  try {
+    const user = req.user;
+    const totalOrders = await Order.countDocuments({ user: user._id });
+    const recentOrders = await Order.find({ user: user._id })
+      .sort({ createdAt: -1 })
+      .limit(8)
+      .select('orderNumber status pricing.total createdAt monthlySubscription items')
+      .lean();
+
+    return res.json({
+      user: {
+        id: String(user._id),
+        name: user.name,
+        phonenumber: user.phonenumber,
+        email: user.email || '',
+        location: user.location || 'Dhaka',
+        totalOrders: user.totalOrders ?? totalOrders,
+        totalSpend: user.totalSpend ?? 0,
+      },
+      stats: { totalOrders },
+      recentOrders: recentOrders.map((o) => ({
+        id: String(o._id),
+        orderNumber: o.orderNumber,
+        status: o.status,
+        total: o.pricing?.total ?? 0,
+        itemCount: (o.items || []).reduce((s, i) => s + (i.qty || 0), 0),
+        monthlySubscription: Boolean(o.monthlySubscription),
+        createdAt: o.createdAt,
+      })),
+    });
+  } catch (error) {
+    return res.status(500).json({ message: 'Failed to load profile', error: error.message });
+  }
+};
+
 //logout user (handled in route by clearing cookie)
- 
+
 export const logoutUser = (req, res) => {
     res.json({ message: 'Logged out successfully' });
 };

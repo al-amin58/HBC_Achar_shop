@@ -19,7 +19,7 @@ const sidebarConfig = [
       { icon: Grid3X3, label: 'Sub-Categories', path: '/admin/sub-categories' },
     ]
   },
-  { icon: Zap, label: 'Flash Sale', path: '/admin/flash-sale', badge: 'LIVE' },
+  { icon: Zap, label: 'Flash Sale', path: '/admin/settings?tab=flash', badge: 'LIVE' },
   { icon: Users, label: 'Customers', path: '/admin/customers' },
   { icon: Wallet, label: 'Wallet', path: '/admin/wallet' },
   { icon: FileText, label: 'Landing Pages', path: '/admin/landing-pages' },

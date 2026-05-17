@@ -1,6 +1,9 @@
 // CheckoutPage.jsx
-import  { useState } from 'react';
-import { useNavigate  } from 'react-router';
+import  { useState, useMemo } from 'react';
+import { useNavigate, useLocation  } from 'react-router';
+import { toast } from 'react-toastify';
+import api from '../../api/axios';
+import { useCart } from '../../componets/useCart.jsx';
 import { 
   ChevronRight, 
   ChevronLeft, 
@@ -24,36 +27,7 @@ import {
 
 } from 'lucide-react';
 
-// ─── Demo Data ──────────────────────────────────────────────
-const demoCartItems = [
-  {
-    id: 1,
-    name: 'মিষ্টি আমের আচার',
-    nameEn: 'Sweet Mango Pickle',
-    variation: '500g Jar',
-    price: 280,
-    qty: 2,
-    image: 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=150&h=150&fit=crop'
-  },
-  {
-    id: 2,
-    name: 'তেতুলের আচার',
-    nameEn: 'Tamarind Pickle',
-    variation: '250g Jar',
-    price: 180,
-    qty: 1,
-    image: 'https://images.unsplash.com/photo-1615485290382-441e4d049cb5?w=150&h=150&fit=crop'
-  },
-  {
-    id: 3,
-    name: 'লেবুর আচার',
-    nameEn: 'Lime Pickle',
-    variation: '1kg Jar',
-    price: 450,
-    qty: 1,
-    image: 'https://images.unsplash.com/photo-1596560548464-f010549b84d7?w=150&h=150&fit=crop'
-  }
-];
+// Demo data removed — using real cart from useCart hook
 
 const coupons = {
   'ACHAR10': { type: 'percentage', value: 10, maxDiscount: 100 },
@@ -507,8 +481,40 @@ const SelectField = ({ label, required, options, value, onChange, placeholder, d
 // ─── Main Component ─────────────────────────────────────────
 export default function CheckoutPage() {
   const [step, setStep] = useState(1); // 1 = Customer Info, 2 = Payment
-const navigate = useNavigate();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { cart, monthlySubscription, clearCart, fetchCart } = useCart();
+  const [placingOrder, setPlacingOrder] = useState(false);
 
+  // Buy Now flow: if navigated with buyNow state, show only that product
+  // Otherwise show full cart
+  const checkoutItems = useMemo(() => {
+    const buyNow = location.state?.buyNow ? location.state.product : null;
+    if (buyNow) {
+      return [{
+        id: buyNow.id,
+        name: buyNow.name,
+        image: buyNow.image || '',
+        variation: buyNow.variation || '',
+        price: buyNow.price,
+        qty: buyNow.qty || 1,
+      }];
+    }
+    // Map cart items from useCart format to checkout display format
+    return cart.map(item => ({
+      id: item.cartId,
+      cartId: item.cartId,
+      productId: item.id,
+      name: item.name,
+      image: item.image || '',
+      variation: item.variation?.label || '',
+      variationLabel: item.variation?.label || '',
+      price: item.price,
+      oldPrice: item.oldPrice,
+      isFlashSale: item.isFlashSale,
+      qty: item.qty,
+    }));
+  }, [location.state, cart]);
 
   // Form States
   const [formData, setFormData] = useState({
@@ -534,14 +540,14 @@ const navigate = useNavigate();
 
   // ─── Coin States ─────────────────────────────────────────
   const [showCoinModal, setShowCoinModal] = useState(false);
-  const [appliedCoins, setAppliedCoins] = useState(0); // Number of coins applied
-  const [userCoinBalance] = useState(2500); // Demo: User has 2500 coins
+  const [appliedCoins, setAppliedCoins] = useState(0);
+  const [userCoinBalance] = useState(2500);
 
   // Demo wallet balance
   const walletBalance = 500;
 
-  // Calculations
-  const subtotal = demoCartItems.reduce((sum, item) => sum + (item.price * item.qty), 0);
+  // Calculations — using real checkoutItems
+  const subtotal = checkoutItems.reduce((sum, item) => sum + (item.price * item.qty), 0);
   const deliveryCharge = 85;
 
   const calculateDiscount = () => {
@@ -651,8 +657,47 @@ const navigate = useNavigate();
     setAppliedCoins(0);
   };
 
-  const handlePlaceOrder = () => {
-    alert('অর্ডার সফলভাবে সম্পন্ন হয়েছে! 🎉');
+  const handlePlaceOrder = async () => {
+    if (checkoutItems.length === 0) {
+      toast.error('কার্ট খালি');
+      return;
+    }
+    setPlacingOrder(true);
+    try {
+      const isBuyNow = Boolean(location.state?.buyNow);
+      const payload = {
+        buyNow: isBuyNow,
+        items: isBuyNow
+          ? checkoutItems.map((it) => ({
+              productId: location.state.product.id,
+              name: it.name,
+              image: it.image,
+              variationLabel: it.variation,
+              price: it.price,
+              qty: it.qty,
+              isFlashSale: location.state.product.isFlashSale,
+            }))
+          : undefined,
+        customer: formData,
+        paymentMethod,
+        orderNote,
+        couponCode: appliedCoupon?.code || '',
+        discount,
+        deliveryCharge,
+        walletUsed: walletDeduction,
+        coinDiscount,
+        monthlySubscription,
+      };
+      const res = await api.post('/orders', payload);
+      if (!isBuyNow) await clearCart();
+      else await fetchCart();
+      toast.success('অর্ডার সফলভাবে সম্পন্ন হয়েছে!');
+      navigate(`/invoice?id=${res.data.id}`, { replace: true });
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'অর্ডার সম্পন্ন করা যায়নি');
+    } finally {
+      setPlacingOrder(false);
+    }
   };
 
   // Get districts based on division
@@ -1190,10 +1235,11 @@ const navigate = useNavigate();
                 {/* Place Order Button */}
                 <button
                   onClick={handlePlaceOrder}
-                  className="w-full mt-6 py-4 bg-linear-to-r from-orange-500 via-amber-500 to-green-500 text-white font-bold text-lg rounded-xl shadow-lg hover:shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                  disabled={placingOrder || checkoutItems.length === 0}
+                  className="w-full mt-6 py-4 bg-linear-to-r from-orange-500 via-amber-500 to-green-500 text-white font-bold text-lg rounded-xl shadow-lg hover:shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-60"
                 >
                   <Lock className="w-5 h-5" />
-                  অর্ডার কনফার্ম করুন
+                  {placingOrder ? 'অর্ডার হচ্ছে...' : 'অর্ডার কনফার্ম করুন'}
                 </button>
               </div>
             )}
@@ -1210,19 +1256,33 @@ const navigate = useNavigate();
                   অর্ডার সারাংশ
                 </h2>
 
+                {monthlySubscription && (
+                  <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                    প্রতি মাসে কিনতে চাই — অর্ডার ও ইনভয়েসে দেখাবে
+                  </div>
+                )}
+
                 {/* Product List */}
                 <div className="space-y-4 max-h-80 overflow-y-auto pr-1 mb-4">
-                  {demoCartItems.map((item) => (
+                  {checkoutItems.length === 0 ? (
+                    <div className="p-6 text-center text-gray-400 text-sm">
+                      আপনার ব্যাগ খালি — পণ্য যোগ করুন
+                    </div>
+                  ) : checkoutItems.map((item) => (
                     <div key={item.id} className="flex gap-3 p-2 rounded-lg hover:bg-orange-50/50 transition-colors">
-                      <img
-                        src={item.image}
-                        alt={item.name}
-                        className="w-16 h-16 rounded-lg object-cover border border-orange-100"
-                      />
+                      {item.image ? (
+                        <img
+                          src={item.image}
+                          alt={item.name}
+                          className="w-16 h-16 rounded-lg object-cover border border-orange-100"
+                          onError={(e) => { e.target.style.display = 'none'; }}
+                        />
+                      ) : (
+                        <div className="w-16 h-16 rounded-lg bg-orange-50 flex items-center justify-center text-2xl border border-orange-100">🫙</div>
+                      )}
                       <div className="flex-1 min-w-0">
                         <h3 className="text-sm font-semibold text-gray-800 truncate">{item.name}</h3>
-                        <p className="text-xs text-gray-500">{item.nameEn}</p>
-                        <p className="text-xs text-orange-600 mt-0.5">{item.variation}</p>
+                        {item.variation && <p className="text-xs text-orange-600 mt-0.5">{item.variation}</p>}
                         <div className="flex items-center justify-between mt-1">
                           <span className="text-xs text-gray-500">x{item.qty}</span>
                           <span className="text-sm font-bold text-gray-800">৳{item.price * item.qty}</span>

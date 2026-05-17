@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { categories, pages } from "../../pages/website/data/navbarData.js";
+import { pages } from "../../pages/website/data/navbarData.js";
 
 function MobileMenuTabButton({ label, tabKey, activeTab, setActiveTab }) {
   return (
@@ -23,13 +23,12 @@ function MobileMenuGridItem({ item }) {
       href={item.href}
       className="flex items-center gap-2 py-2 px-3 text-sm text-emerald-800 hover:text-orange-500 hover:bg-orange-50 rounded-xl transition font-medium border border-emerald-100 hover:border-orange-200"
     >
-      <span>{item.icon}</span>
       <span>{item.name}</span>
     </a>
   );
 }
 
-const MobileMenu = ({ isOpen, onClose }) => {
+const MobileMenu = ({ isOpen, onClose, categories = [] }) => {
   const [activeTab, setActiveTab] = useState("categories");
 
   if (!isOpen) return null;

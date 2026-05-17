@@ -1,10 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
+import { useLocation } from 'react-router';
+import api from "../../api/axios";
+import { toast } from "react-toastify";
 
-// ==========================================
-// HBC ACHAR - ADMIN SETTINGS PAGE ONLY
-// For: <Outlet /> inside AdminLayout
-// Theme: Jam BG + Light Green/Orange Buttons
-// ==========================================
+const getApiErrorMessage = (err, fallback) =>
+  err?.response?.data?.message ||
+  (typeof err?.response?.data === "string" ? err.response.data : null) ||
+  err?.message ||
+  fallback;
 
 /* --- Reusable UI Components --- */
 
@@ -68,6 +71,9 @@ const SelectField = ({ label, value, onChange, options, description }) => (
       onChange={(e) => onChange(e.target.value)}
       className="w-full px-4 py-2.5 bg-white/10 backdrop-blur-sm border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-orange-400/50 focus:border-transparent transition-all duration-300 shadow-sm appearance-none cursor-pointer"
     >
+      <option value="" className="bg-[#3d0c3d] text-white">
+        Select...
+      </option>
       {options.map((opt) => (
         <option key={opt.value} value={opt.value} className="bg-[#3d0c3d] text-white">
           {opt.label}
@@ -77,21 +83,26 @@ const SelectField = ({ label, value, onChange, options, description }) => (
   </div>
 );
 
-const Card = ({ children, title, icon, className = "" }) => (
-  <div className={`bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 shadow-lg hover:shadow-orange-500/10 transition-all duration-300 overflow-hidden ${className}`}>
-    {(title || icon) && (
-      <div className="px-6 py-4 border-b border-white/10 bg-gradient-to-r from-white/10 to-transparent">
-        <h3 className="text-base font-bold text-white flex items-center gap-2">
-          {icon && <span className="text-orange-300">{icon}</span>}
-          {title}
-        </h3>
-      </div>
-    )}
-    <div className="p-6 space-y-4">
-      {children}
+const Card = ({ children, title, icon, className = "" }) => {
+  const hasOverflow = className.includes("overflow-");
+  return (
+    <div
+      className={`bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 shadow-lg hover:shadow-orange-500/10 transition-all duration-300 ${
+        !hasOverflow ? "overflow-hidden" : ""
+      } ${className}`}
+    >
+      {(title || icon) && (
+        <div className="px-6 py-4 border-b border-white/10 bg-gradient-to-r from-white/10 to-transparent">
+          <h3 className="text-base font-bold text-white flex items-center gap-2">
+            {icon && <span className="text-orange-300">{icon}</span>}
+            {title}
+          </h3>
+        </div>
+      )}
+      <div className="p-6 space-y-4">{children}</div>
     </div>
-  </div>
-);
+  );
+};
 
 const Button = ({ children, onClick, variant = "primary", type = "button", className = "" }) => {
   const baseClasses = "px-6 py-2.5 rounded-xl font-semibold text-sm transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#3d0c3d]";
@@ -151,6 +162,157 @@ const ColorPicker = ({ label, value, onChange }) => (
   </div>
 );
 
+const ProductPicker = ({
+  title,
+  icon,
+  placeholder,
+  products,
+  loading,
+  error,
+  onRetry,
+  selected,
+  onAdd,
+  onRemove,
+  defaultSort,
+}) => {
+  const [q, setQ] = useState("");
+
+  const selectedIds = useMemo(
+    () => new Set((Array.isArray(selected) ? selected : []).map((p) => String(p.id))),
+    [selected]
+  );
+
+  const list = useMemo(() => {
+    const base = Array.isArray(products) ? products : [];
+    const query = q.toLowerCase().trim();
+    if (!query) return [];
+    const sorted =
+      defaultSort === "sold_desc"
+        ? [...base].sort((a, b) => (Number(b.soldCount) || 0) - (Number(a.soldCount) || 0))
+        : base;
+    const filtered = query
+      ? sorted.filter(
+          (p) =>
+            String(p.name || "").toLowerCase().includes(query) ||
+            String(p.sku || "").toLowerCase().includes(query)
+        )
+      : sorted;
+    return filtered;
+  }, [defaultSort, products, q]);
+
+  const renderThumb = (p) => {
+    const src = typeof p?.image === "string" ? p.image.trim() : "";
+    const looksLikeEmoji = src && src.length <= 4 && !src.includes("/") && !src.includes(".");
+    if (src && !looksLikeEmoji) {
+      return <img src={src} alt={p?.name || ""} className="h-9 w-9 rounded-lg object-cover border border-white/10" />;
+    }
+    if (src && looksLikeEmoji) return <span className="text-2xl leading-none">{src}</span>;
+    return <span className="text-2xl leading-none">🛍️</span>;
+  };
+
+  return (
+    <Card title={title} icon={icon} className={`overflow-visible relative ${q.trim() ? 'z-40' : 'z-10'}`}>
+      <div className="space-y-4">
+        <div className="relative">
+          <input
+            type="text"
+            placeholder={placeholder}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-orange-400/50 pr-20"
+          />
+          <div className="absolute right-4 top-3.5 flex items-center gap-2">
+            {q && (
+              <button
+                type="button"
+                onClick={() => setQ("")}
+                className="text-white/40 hover:text-white transition-colors"
+              >
+                ✕
+              </button>
+            )}
+            <span className="text-white/40">🔍</span>
+          </div>
+
+          {!loading && !error && q.trim() && (
+            <div className="absolute left-0 right-0 top-full mt-2 bg-[#2d0c2d] rounded-xl border border-white/15 shadow-2xl overflow-hidden z-30 max-h-80 overflow-y-auto">
+              {list.length > 0 ? (
+                list.map((product) => {
+                  const disabled = selectedIds.has(String(product.id));
+                  return (
+                    <button
+                      key={product.id}
+                      type="button"
+                      onClick={() => {
+                        if (disabled) return;
+                        onAdd(product);
+                        setQ("");
+                      }}
+                      className={`w-full text-left flex items-center justify-between gap-4 p-3 hover:bg-white/10 border-b border-white/10 last:border-b-0 ${
+                        disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        {renderThumb(product)}
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-white truncate">{product.name}</p>
+                          <p className="text-xs text-white/50">
+                            {product.price != null ? `৳${product.price}` : "—"}
+                            {product.sku ? ` • ${product.sku}` : ""}
+                            {defaultSort === "sold_desc" && Number(product.soldCount) > 0 ? ` • Sold: ${product.soldCount}` : ""}
+                          </p>
+                        </div>
+                      </div>
+                      <span className={`text-xs font-semibold ${disabled ? "text-green-300" : "text-white/60"}`}>
+                        {disabled ? "Selected" : "Select"}
+                      </span>
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="p-3 text-sm text-white/60">No products found.</div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {loading ? (
+          <div className="text-sm text-white/50">Loading products...</div>
+        ) : error ? (
+          <div className="flex items-center justify-between gap-3 p-3 bg-red-500/10 border border-red-400/20 rounded-xl">
+            <div className="text-sm text-red-200">{error}</div>
+            {onRetry && (
+              <Button variant="secondary" onClick={onRetry} className="whitespace-nowrap">
+                Retry
+              </Button>
+            )}
+          </div>
+        ) : null}
+
+        <div className="mt-2">
+          <h4 className="text-sm font-semibold text-white/80 mb-3">Selected ({Array.isArray(selected) ? selected.length : 0})</h4>
+          {Array.isArray(selected) && selected.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {selected.map((product) => (
+                <div key={product.id} className="flex items-center gap-3 p-3 bg-white/10 rounded-xl border border-white/20">
+                  {renderThumb(product)}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-white truncate">{product.name}</p>
+                    <p className="text-xs text-white/50">{product.price != null ? `৳${product.price}` : "—"}</p>
+                  </div>
+                  <button onClick={() => onRemove(product.id)} className="text-red-400 hover:text-red-300 text-lg">✕</button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-white/40 italic">No products selected yet</p>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+};
+
 const Modal = ({ isOpen, onClose, title, children, onConfirm }) => {
   if (!isOpen) return null;
   return (
@@ -185,6 +347,7 @@ const sidebarGroups = [
       { id: "store", label: "Store Settings", icon: "🏪" },
       { id: "logo", label: "Logo & Branding", icon: "🎨" },
       { id: "seo", label: "SEO Settings", icon: "🔍" },
+      { id: "productsSet", label: "Products Set", icon: "🛒" },
     ]
   },
   {
@@ -247,189 +410,529 @@ export default function SettingsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [modalConfig, setModalConfig] = useState({ title: "", content: "", onConfirm: () => {} });
-  const [saveSticky, setSaveSticky] = useState(false);
+  const [settingsLoading, setSettingsLoading] = useState(true);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsError, setSettingsError] = useState("");
+  const [productsCatalog, setProductsCatalog] = useState([]);
+  const [productsCatalogLoading, setProductsCatalogLoading] = useState(false);
+  const [productsCatalogError, setProductsCatalogError] = useState("");
+  const [productsCatalogLoadedOnce, setProductsCatalogLoadedOnce] = useState(false);
+  const [flashAddQuery, setFlashAddQuery] = useState("");
+  const [flashAddDiscountPercent, setFlashAddDiscountPercent] = useState("");
+  const [flashAutoSetOriginal, setFlashAutoSetOriginal] = useState(true);
+  const [flashSearchQuery, setFlashSearchQuery] = useState("");
+  const [flashSelectedIds, setFlashSelectedIds] = useState([]);
+  const [flashBulkDiscountPercent, setFlashBulkDiscountPercent] = useState("");
+  const [flashRestoreOnRemove, setFlashRestoreOnRemove] = useState(false);
+  const [flashEditId, setFlashEditId] = useState(null);
+  const [flashEditSalePrice, setFlashEditSalePrice] = useState("");
+  const [flashEditOriginalPrice, setFlashEditOriginalPrice] = useState("");
+  const [flashUpdating, setFlashUpdating] = useState(false);
+  const location = useLocation();
 
-  // Scroll listener for sticky save button
   useEffect(() => {
-    const handleScroll = () => setSaveSticky(window.scrollY > 200);
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
+    const tab = new URLSearchParams(location.search).get("tab");
+    if (!tab) return;
+    const allowed = new Set(sidebarGroups.flatMap((g) => g.items).map((i) => i.id));
+    if (!allowed.has(tab)) return;
+    setActiveTab(tab);
+  }, [location.search]);
+
+  useEffect(() => {
+    let alive = true;
+    const fetchSettings = async () => {
+      try {
+        setSettingsLoading(true);
+        setSettingsError("");
+        const res = await api.get("/settings");
+        const data = res?.data && typeof res.data === "object" ? res.data : {};
+        if (!alive) return;
+        setSettings((prev) => ({
+          ...prev,
+          ...data,
+          featuredProducts: Array.isArray(data.featuredProducts) ? data.featuredProducts : (prev.featuredProducts || []),
+          newArrivals: Array.isArray(data.newArrivals) ? data.newArrivals : (prev.newArrivals || []),
+          bestSelling: Array.isArray(data.bestSelling) ? data.bestSelling : (prev.bestSelling || []),
+        }));
+      } catch (err) {
+        if (!alive) return;
+        const msg = err?.response?.data?.message || "Failed to load settings.";
+        setSettingsError(msg);
+        toast.error(msg);
+      } finally {
+        if (!alive) return;
+        setSettingsLoading(false);
+      }
+    };
+    fetchSettings();
+    return () => {
+      alive = false;
+    };
   }, []);
+
+  const fetchProductsCatalog = async ({ force = false } = {}) => {
+    if (productsCatalogLoading) return;
+    if (!force && productsCatalogLoadedOnce) return;
+    try {
+      setProductsCatalogLoading(true);
+      setProductsCatalogError("");
+      const res = await api.get("/products");
+      const rows = Array.isArray(res.data) ? res.data : [];
+      const normalized = rows
+        .map((p) => ({
+          id: p?._id ?? p?.id,
+          name: String(p?.name || "").trim() || "Unnamed product",
+          price: p?.price ?? null,
+          originalPrice: p?.originalPrice ?? null,
+          sku: p?.sku ?? "",
+          image: p?.image ?? "",
+          status: p?.status ?? "",
+          stock: p?.stock ?? null,
+          soldCount: p?.soldCount ?? p?.sold ?? p?.totalSold ?? 0,
+        }))
+        .filter((p) => p.id != null);
+      setProductsCatalog(normalized);
+      if (normalized.length === 0) {
+        toast.info("No products found. Please add products first.");
+      }
+    } catch (err) {
+      const msg = err?.response?.data?.message || "Failed to load products.";
+      setProductsCatalogError(msg);
+      toast.error(msg);
+      setProductsCatalog([]);
+    } finally {
+      setProductsCatalogLoading(false);
+      setProductsCatalogLoadedOnce(true);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab !== "productsSet" && activeTab !== "flash") return;
+    if (productsCatalogLoadedOnce) return;
+    fetchProductsCatalog();
+  }, [activeTab, productsCatalogLoadedOnce]);
+
+  const renderProductThumb = (p) => {
+    const src = typeof p?.image === "string" ? p.image.trim() : "";
+    const looksLikeEmoji = src && src.length <= 4 && !src.includes("/") && !src.includes(".");
+    if (src && !looksLikeEmoji) {
+      return <img src={src} alt={p?.name || ""} className="h-9 w-9 rounded-lg object-cover border border-white/10" />;
+    }
+    if (src && looksLikeEmoji) return <span className="text-2xl leading-none">{src}</span>;
+    return <span className="text-2xl leading-none">🫙</span>;
+  };
+
+  const flashProducts = useMemo(() => {
+    return (Array.isArray(productsCatalog) ? productsCatalog : []).filter(
+      (p) => String(p?.status || "").toLowerCase() === "flash"
+    );
+  }, [productsCatalog]);
+
+  const flashSelectedSet = useMemo(() => new Set((flashSelectedIds || []).map(String)), [flashSelectedIds]);
+
+  const flashProductsFiltered = useMemo(() => {
+    const q = String(flashSearchQuery || "").toLowerCase().trim();
+    if (!q) return flashProducts;
+    return flashProducts.filter(
+      (p) =>
+        String(p?.name || "").toLowerCase().includes(q) ||
+        String(p?.sku || "").toLowerCase().includes(q)
+    );
+  }, [flashProducts, flashSearchQuery]);
+
+  const flashCandidates = useMemo(() => {
+    const q = String(flashAddQuery || "").toLowerCase().trim();
+    if (!q) return [];
+    const inFlash = new Set(flashProducts.map((p) => String(p.id)));
+    return (Array.isArray(productsCatalog) ? productsCatalog : [])
+      .filter((p) => !inFlash.has(String(p.id)))
+      .filter(
+        (p) =>
+          String(p?.name || "").toLowerCase().includes(q) ||
+          String(p?.sku || "").toLowerCase().includes(q)
+      )
+      .slice(0, 20);
+  }, [flashAddQuery, flashProducts, productsCatalog]);
+
+  const computeDiscountedPrice = (basePrice, percent) => {
+    const b = Number(basePrice);
+    const p = Number(percent);
+    if (!Number.isFinite(b) || b <= 0) return null;
+    if (!Number.isFinite(p) || p <= 0) return null;
+    const capped = Math.min(95, Math.max(1, p));
+    const next = Math.round(b * (1 - capped / 100));
+    return Math.max(0, next);
+  };
+
+  const refreshProducts = async () => {
+    await fetchProductsCatalog({ force: true });
+  };
+
+  const addFlashProduct = async (product) => {
+    if (flashUpdating) return;
+    if (!settings.flashSaleEnabled) {
+      toast.warning("Flash sale is disabled. Enable it first.");
+      return;
+    }
+    if (flashLimit != null && flashProducts.length >= flashLimit) {
+      toast.warning("Flash sale product limit reached.");
+      return;
+    }
+    setFlashUpdating(true);
+    try {
+      const payload = { status: "flash" };
+      const currentPrice = product?.price ?? null;
+      const currentOriginal = product?.originalPrice ?? null;
+
+      let base = currentOriginal ?? currentPrice;
+      if (flashAutoSetOriginal && currentOriginal == null && currentPrice != null) {
+        payload.originalPrice = Number(currentPrice);
+        base = Number(currentPrice);
+      }
+
+      const discounted = computeDiscountedPrice(base, flashAddDiscountPercent);
+      if (discounted != null && base != null) {
+        payload.originalPrice = Number(base);
+        payload.price = discounted;
+      }
+
+      await api.put(`/products/${product.id}`, payload);
+      toast.success("Added to flash sale.");
+      setFlashAddQuery("");
+      await refreshProducts();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "Could not add to flash sale."));
+    } finally {
+      setFlashUpdating(false);
+    }
+  };
+
+  const removeFlashProduct = async (productId) => {
+    if (flashUpdating) return;
+    const p = (Array.isArray(productsCatalog) ? productsCatalog : []).find((x) => String(x.id) === String(productId));
+    if (!p) return;
+    setFlashUpdating(true);
+    try {
+      const payload = { status: "active" };
+      if (flashRestoreOnRemove && p.originalPrice != null && Number.isFinite(Number(p.originalPrice))) {
+        payload.price = Number(p.originalPrice);
+        payload.originalPrice = null;
+      }
+      await api.put(`/products/${p.id}`, payload);
+      toast.success("Removed from flash sale.");
+      setFlashSelectedIds((cur) => (cur || []).filter((id) => String(id) !== String(p.id)));
+      await refreshProducts();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "Could not remove from flash sale."));
+    } finally {
+      setFlashUpdating(false);
+    }
+  };
+
+  const startEditFlash = (product) => {
+    setFlashEditId(String(product.id));
+    setFlashEditSalePrice(product?.price != null ? String(product.price) : "");
+    setFlashEditOriginalPrice(product?.originalPrice != null ? String(product.originalPrice) : "");
+  };
+
+  const cancelEditFlash = () => {
+    setFlashEditId(null);
+    setFlashEditSalePrice("");
+    setFlashEditOriginalPrice("");
+  };
+
+  const saveEditFlash = async () => {
+    if (flashUpdating) return;
+    if (!flashEditId) return;
+    const sale = flashEditSalePrice === "" ? null : Number(flashEditSalePrice);
+    const original = flashEditOriginalPrice === "" ? null : Number(flashEditOriginalPrice);
+    if (sale == null || !Number.isFinite(sale) || sale < 0) {
+      toast.warning("Enter a valid sale price.");
+      return;
+    }
+    if (original != null && (!Number.isFinite(original) || original <= 0)) {
+      toast.warning("Enter a valid original price or leave it empty.");
+      return;
+    }
+    setFlashUpdating(true);
+    try {
+      await api.put(`/products/${flashEditId}`, { status: "flash", price: sale, originalPrice: original });
+      toast.success("Flash product updated.");
+      cancelEditFlash();
+      await refreshProducts();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "Could not update product."));
+    } finally {
+      setFlashUpdating(false);
+    }
+  };
+
+  const toggleFlashSelect = (id) => {
+    const sid = String(id);
+    setFlashSelectedIds((cur) => {
+      const arr = Array.isArray(cur) ? cur.map(String) : [];
+      return arr.includes(sid) ? arr.filter((x) => x !== sid) : [...arr, sid];
+    });
+  };
+
+  const toggleSelectAllFlashFiltered = () => {
+    if (flashProductsFiltered.length === 0) return;
+    const filtered = new Set(flashProductsFiltered.map((p) => String(p.id)));
+    const allSelected = flashProductsFiltered.every((p) => flashSelectedSet.has(String(p.id)));
+    if (allSelected) {
+      setFlashSelectedIds((cur) => (Array.isArray(cur) ? cur.filter((id) => !filtered.has(String(id))) : []));
+      return;
+    }
+    const next = new Set((flashSelectedIds || []).map(String));
+    for (const id of filtered) next.add(String(id));
+    setFlashSelectedIds(Array.from(next));
+  };
+
+  const applyFlashBulkDiscount = async () => {
+    if (flashUpdating) return;
+    if (!settings.flashSaleEnabled) {
+      toast.warning("Flash sale is disabled. Enable it first.");
+      return;
+    }
+    if (!Array.isArray(flashSelectedIds) || flashSelectedIds.length === 0) {
+      toast.warning("Select products first.");
+      return;
+    }
+    const percent = Number(flashBulkDiscountPercent);
+    if (!Number.isFinite(percent) || percent <= 0) {
+      toast.warning("Enter a valid discount percent.");
+      return;
+    }
+    setFlashUpdating(true);
+    try {
+      const byId = new Map((Array.isArray(productsCatalog) ? productsCatalog : []).map((p) => [String(p.id), p]));
+      const targets = flashSelectedIds.map((id) => byId.get(String(id))).filter(Boolean);
+      await Promise.all(
+        targets.map((p) => {
+          const base = p.originalPrice ?? p.price;
+          const discounted = computeDiscountedPrice(base, percent);
+          if (discounted == null || base == null) return Promise.resolve();
+          return api.put(`/products/${p.id}`, { status: "flash", originalPrice: Number(base), price: discounted });
+        })
+      );
+      toast.success("Discount applied.");
+      await refreshProducts();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "Could not apply discount."));
+    } finally {
+      setFlashUpdating(false);
+    }
+  };
+
+  const bulkRemoveFlash = async () => {
+    if (flashUpdating) return;
+    if (!Array.isArray(flashSelectedIds) || flashSelectedIds.length === 0) {
+      toast.warning("Select products first.");
+      return;
+    }
+    setFlashUpdating(true);
+    try {
+      const byId = new Map((Array.isArray(productsCatalog) ? productsCatalog : []).map((p) => [String(p.id), p]));
+      const targets = flashSelectedIds.map((id) => byId.get(String(id))).filter(Boolean);
+      await Promise.all(
+        targets.map((p) => {
+          const payload = { status: "active" };
+          if (flashRestoreOnRemove && p.originalPrice != null && Number.isFinite(Number(p.originalPrice))) {
+            payload.price = Number(p.originalPrice);
+            payload.originalPrice = null;
+          }
+          return api.put(`/products/${p.id}`, payload);
+        })
+      );
+      toast.success("Removed selected from flash sale.");
+      setFlashSelectedIds([]);
+      await refreshProducts();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "Could not remove all selected."));
+    } finally {
+      setFlashUpdating(false);
+    }
+  };
 
   // --- State for all settings ---
   const [settings, setSettings] = useState({
     // General
-    siteName: "HBC Achar",
-    siteTitle: "Premium Bengali Pickles - HBC Achar",
-    adminEmail: "admin@hbcachar.com",
-    supportPhone: "+880 1XXX-XXXXXX",
-    timezone: "Asia/Dhaka",
-    dateFormat: "DD/MM/YYYY",
+    siteName: "",
+    siteTitle: "",
+    adminEmail: "",
+    supportPhone: "",
+    timezone: "",
+    dateFormat: "",
     maintenanceMode: false,
 
     // Store
-    storeAddress: "123 Pickle Lane, Dhaka, Bangladesh",
+    storeAddress: "",
     storeMap: "",
-    defaultCurrency: "BDT",
-    currencySymbol: "৳",
-    minOrderAmount: "500",
-    codEnabled: true,
-    guestCheckout: true,
+    defaultCurrency: "",
+    currencySymbol: "",
+    minOrderAmount: "",
+    codEnabled: false,
+    guestCheckout: false,
 
     // Logo
     logoPreview: "",
     faviconPreview: "",
     adminLogoPreview: "",
     loaderPreview: "",
-    primaryColor: "#FF6B35",
-    secondaryColor: "#4ECDC4",
+    primaryColor: "",
+    secondaryColor: "",
 
     // SEO
-    metaTitle: "HBC Achar - Premium Bengali Pickles",
-    metaDescription: "Authentic homemade Bengali pickles delivered to your doorstep. Mango, olive, chili and more traditional flavors.",
-    metaKeywords: "achar, pickle, bengali, mango, olive, homemade, traditional",
+    metaTitle: "",
+    metaDescription: "",
+    metaKeywords: "",
     ogImagePreview: "",
     googleVerify: "",
-    robotsTxt: "User-agent: *\nDisallow: /admin/\nDisallow: /cart/\nAllow: /",
-    sitemapEnabled: true,
+    robotsTxt: "",
+    sitemapEnabled: false,
 
     // Payment
-    sslcommerzEnabled: true,
+    sslcommerzEnabled: false,
     sslcommerzKey: "",
     sslcommerzSecret: "",
-    sslcommerzSandbox: true,
+    sslcommerzSandbox: false,
     stripeEnabled: false,
     stripeKey: "",
     stripeSecret: "",
-    stripeSandbox: true,
+    stripeSandbox: false,
     paypalEnabled: false,
-    bkashEnabled: true,
+    bkashEnabled: false,
     bkashKey: "",
     bkashSecret: "",
-    bkashSandbox: true,
-    nagadEnabled: true,
+    bkashSandbox: false,
+    nagadEnabled: false,
     rocketEnabled: false,
-    codEnabledPayment: true,
+    codEnabledPayment: false,
 
     // Wallet
-    walletEnabled: true,
-    minRecharge: "100",
-    cashbackPercent: "5",
-    referralBonus: "50",
-    walletExpireDays: "365",
-    autoRefund: true,
+    walletEnabled: false,
+    minRecharge: "",
+    cashbackPercent: "",
+    referralBonus: "",
+    walletExpireDays: "",
+    autoRefund: false,
 
     // Flash Sale
-    flashSaleEnabled: true,
-    flashTimer: "24",
-    productLimit: "10",
-    autoExpire: true,
-    homepageFlash: true,
+    flashSaleEnabled: false,
+    flashTimer: "",
+    productLimit: "",
+    autoExpire: false,
+    homepageFlash: false,
 
     // Shipping
-    deliveryZones: "Dhaka City, Outside Dhaka",
-    shippingCharge: "60",
-    freeShippingLimit: "1000",
-    estDeliveryTime: "2-3 Business Days",
-    deliveryPartner: "Pathao",
+    deliveryZones: "",
+    shippingCharge: "",
+    freeShippingLimit: "",
+    estDeliveryTime: "",
+    deliveryPartner: "",
 
     // Tax
-    vatPercent: "5",
-    taxEnabled: true,
-    invoicePrefix: "HBC-INV",
-    invoiceFooter: "Thank you for choosing HBC Achar!",
-    autoInvoice: true,
+    vatPercent: "",
+    taxEnabled: false,
+    invoicePrefix: "",
+    invoiceFooter: "",
+    autoInvoice: false,
 
     // Order
     autoConfirm: false,
-    autoCancelHours: "48",
-    returnDays: "7",
-    autoSendInvoice: true,
+    autoCancelHours: "",
+    returnDays: "",
+    autoSendInvoice: false,
 
     // Product
     productApproval: false,
-    stockWarning: "10",
-    skuAuto: true,
-    productReview: true,
-    relatedProduct: true,
+    stockWarning: "",
+    skuAuto: false,
+    productReview: false,
+    relatedProduct: false,
 
     // Variation
-    colorEnabled: true,
-    sizeEnabled: true,
-    unitEnabled: true,
-    dynamicVariation: true,
+    colorEnabled: false,
+    sizeEnabled: false,
+    unitEnabled: false,
+    dynamicVariation: false,
 
     // Customer
-    registrationEnabled: true,
-    otpVerify: true,
-    customerWallet: true,
-    rewardPoints: true,
-    guestControl: true,
+    registrationEnabled: false,
+    otpVerify: false,
+    customerWallet: false,
+    rewardPoints: false,
+    guestControl: false,
 
     // Notification
-    pushEnabled: true,
-    orderNotify: true,
-    deliveryNotify: true,
+    pushEnabled: false,
+    orderNotify: false,
+    deliveryNotify: false,
     promoNotify: false,
 
     // Email
-    smtpHost: "smtp.gmail.com",
-    smtpPort: "587",
+    smtpHost: "",
+    smtpPort: "",
     smtpUser: "",
     smtpPass: "",
-    mailEncrypt: "TLS",
+    mailEncrypt: "",
 
     // SMS
-    smsProvider: "Twilio",
+    smsProvider: "",
     smsApiKey: "",
-    senderId: "HBCACHAR",
-    otpSms: true,
+    senderId: "",
+    otpSms: false,
 
     // Landing
-    heroSlider: true,
-    featuredProduct: true,
-    dynamicSort: true,
+    heroSlider: false,
+    featuredProduct: false,
+    dynamicSort: false,
+
+    // Products Set
+    featuredProducts: [],
+    newArrivals: [],
+    bestSelling: [],
 
     // Banner
     homeBannerPreview: "",
     offerBannerPreview: "",
     popupBannerPreview: "",
-    bannerActive: true,
+    bannerActive: false,
     bannerSchedule: "",
 
     // Coupon
     couponAutoApply: false,
-    couponLimit: "1",
-    firstOrderCoupon: true,
-    referralCoupon: true,
-    flashCoupon: true,
+    couponLimit: "",
+    firstOrderCoupon: false,
+    referralCoupon: false,
+    flashCoupon: false,
 
     // Auth
-    googleLogin: true,
+    googleLogin: false,
     facebookLogin: false,
-    jwtExpire: "24",
-    loginAttempts: "5",
+    jwtExpire: "",
+    loginAttempts: "",
     twoFactor: false,
 
     // Staff
-    adminRole: "Super Admin",
-    staffRole: "Manager",
+    adminRole: "",
+    staffRole: "",
 
     // Social
-    facebook: "https://facebook.com/hbcachar",
-    instagram: "https://instagram.com/hbcachar",
+    facebook: "",
+    instagram: "",
     youtube: "",
     tiktok: "",
-    whatsapp: "+8801XXXXXXXXX",
+    whatsapp: "",
 
     // Chat
-    liveChat: true,
+    liveChat: false,
     messenger: false,
-    whatsappChat: true,
-    ticketSystem: true,
+    whatsappChat: false,
+    ticketSystem: false,
 
     // Backup
-    autoBackup: "daily",
+    autoBackup: "",
 
     // Maintenance
     cacheClear: false,
@@ -442,24 +945,24 @@ export default function SettingsPage() {
 
     // Theme
     darkMode: false,
-    sidebarStyle: "default",
-    themeColor: "orange",
-    fontFamily: "Inter",
+    sidebarStyle: "",
+    themeColor: "",
+    fontFamily: "",
 
     // Language
-    multiLang: true,
-    currencyRate: "1",
+    multiLang: false,
+    currencyRate: "",
     rtlSupport: false,
 
     // Analytics
-    visitorTrack: true,
-    salesTrack: true,
+    visitorTrack: false,
+    salesTrack: false,
     conversionTrack: false,
     heatmap: false,
 
     // Advanced
-    cronJob: "*/5 * * * *",
-    queueSystem: true,
+    cronJob: "",
+    queueSystem: false,
     redisCache: false,
     devMode: false,
   });
@@ -468,13 +971,60 @@ export default function SettingsPage() {
     setSettings(prev => ({ ...prev, [key]: value }));
   };
 
+  const flashLimit = useMemo(() => {
+    const n = settings?.productLimit === "" || settings?.productLimit == null ? null : Number(settings.productLimit);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }, [settings?.productLimit]);
+
+  const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("File read failed"));
+    reader.readAsDataURL(file);
+  });
+
+  const onPickImage = (key) => async (e) => {
+    const file = e?.target?.files?.[0];
+    if (!file) return;
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      updateSetting(key, dataUrl);
+    } catch {
+      toast.error("Image upload failed.");
+    }
+  };
+
   const showModal = (title, content, onConfirm) => {
     setModalConfig({ title, content, onConfirm });
     setModalOpen(true);
   };
 
-  const handleSave = () => {
-    alert("Settings saved successfully! ✅");
+  const handleSave = async () => {
+    if (settingsSaving) return;
+    setSettingsSaving(true);
+    try {
+      const toId = (x) => x?._id ?? x?.id ?? x;
+      const payload = {
+        ...settings,
+        featuredProducts: (settings.featuredProducts || []).map(toId).filter(Boolean),
+        newArrivals: (settings.newArrivals || []).map(toId).filter(Boolean),
+        bestSelling: (settings.bestSelling || []).map(toId).filter(Boolean),
+      };
+      const res = await api.put("/settings", payload);
+      const data = res?.data && typeof res.data === "object" ? res.data : {};
+      setSettings((prev) => ({
+        ...prev,
+        ...data,
+        featuredProducts: Array.isArray(data.featuredProducts) ? data.featuredProducts : (prev.featuredProducts || []),
+        newArrivals: Array.isArray(data.newArrivals) ? data.newArrivals : (prev.newArrivals || []),
+        bestSelling: Array.isArray(data.bestSelling) ? data.bestSelling : (prev.bestSelling || []),
+      }));
+      toast.success("Settings saved successfully!");
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to save settings.");
+    } finally {
+      setSettingsSaving(false);
+    }
   };
 
   const filteredGroups = sidebarGroups.map(group => ({
@@ -528,11 +1078,11 @@ export default function SettingsPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card title="Store Location" icon="📍">
           <TextArea label="Store Address" value={settings.storeAddress} onChange={(v) => updateSetting("storeAddress", v)} rows={3} />
-          <FileUpload label="Store Location Map" preview={settings.storeMap} onChange={(e) => updateSetting("storeMap", URL.createObjectURL(e.target.files[0]))} />
+          <FileUpload label="Store Location Map" preview={settings.storeMap} onChange={onPickImage("storeMap")} />
         </Card>
         <Card title="Currency & Checkout" icon="💰">
           <SelectField label="Default Currency" value={settings.defaultCurrency} onChange={(v) => updateSetting("defaultCurrency", v)} 
-            options={[{value:"BDT", label:"Bangladeshi Taka (BDT)"}, {value:"USD", label:"US Dollar (USD)"}, {value:"INR", label:"Indian Rupee (INR)"}]} />
+            options={[{value:"BDT", label:"Bangladeshi Taka (BDT)"}, {value:"USD", label:"US Dollar (USD)"}]} />
           <InputField label="Currency Symbol" value={settings.currencySymbol} onChange={(v) => updateSetting("currencySymbol", v)} />
           <InputField label="Minimum Order Amount" type="number" value={settings.minOrderAmount} onChange={(v) => updateSetting("minOrderAmount", v)} />
           <Toggle label="Cash On Delivery" checked={settings.codEnabled} onChange={(v) => updateSetting("codEnabled", v)} />
@@ -548,10 +1098,10 @@ export default function SettingsPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card title="Brand Assets" icon="🖼️">
           <div className="grid grid-cols-2 gap-4">
-            <FileUpload label="Site Logo" preview={settings.logoPreview} onChange={(e) => updateSetting("logoPreview", URL.createObjectURL(e.target.files[0]))} />
-            <FileUpload label="Favicon" preview={settings.faviconPreview} onChange={(e) => updateSetting("faviconPreview", URL.createObjectURL(e.target.files[0]))} />
-            <FileUpload label="Admin Logo" preview={settings.adminLogoPreview} onChange={(e) => updateSetting("adminLogoPreview", URL.createObjectURL(e.target.files[0]))} />
-            <FileUpload label="Loader Icon" preview={settings.loaderPreview} onChange={(e) => updateSetting("loaderPreview", URL.createObjectURL(e.target.files[0]))} />
+            <FileUpload label="Site Logo" preview={settings.logoPreview} onChange={onPickImage("logoPreview")} />
+            <FileUpload label="Favicon" preview={settings.faviconPreview} onChange={onPickImage("faviconPreview")} />
+            <FileUpload label="Admin Logo" preview={settings.adminLogoPreview} onChange={onPickImage("adminLogoPreview")} />
+            <FileUpload label="Loader Icon" preview={settings.loaderPreview} onChange={onPickImage("loaderPreview")} />
           </div>
         </Card>
         <Card title="Brand Colors" icon="🎨">
@@ -580,7 +1130,7 @@ export default function SettingsPage() {
           <TextArea label="Meta Keywords" value={settings.metaKeywords} onChange={(v) => updateSetting("metaKeywords", v)} rows={2} />
         </Card>
         <Card title="Advanced SEO" icon="📈">
-          <FileUpload label="OG Image" preview={settings.ogImagePreview} onChange={(e) => updateSetting("ogImagePreview", URL.createObjectURL(e.target.files[0]))} />
+          <FileUpload label="OG Image" preview={settings.ogImagePreview} onChange={onPickImage("ogImagePreview")} />
           <InputField label="Google Verification Code" value={settings.googleVerify} onChange={(v) => updateSetting("googleVerify", v)} />
           <Toggle label="Sitemap Auto-Generate" checked={settings.sitemapEnabled} onChange={(v) => updateSetting("sitemapEnabled", v)} />
         </Card>
@@ -645,18 +1195,307 @@ export default function SettingsPage() {
 
   const FlashSaleSettings = () => (
     <div className="space-y-6 animate-fade-in">
-      <SectionHeader title="Flash Sale Settings" subtitle="Configure flash sale timers and limits" />
-      <Card title="Flash Sale Configuration" icon="⚡">
-        <Toggle label="Enable Flash Sale" checked={settings.flashSaleEnabled} onChange={(v) => updateSetting("flashSaleEnabled", v)} />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-          <InputField label="Timer Duration (Hours)" type="number" value={settings.flashTimer} onChange={(v) => updateSetting("flashTimer", v)} />
-          <InputField label="Product Limit" type="number" value={settings.productLimit} onChange={(v) => updateSetting("productLimit", v)} />
-          <InputField label="Auto Expire" type="text" value={settings.autoExpire ? "Enabled" : "Disabled"} onChange={() => {}} disabled />
+      <SectionHeader title="Flash Sale Settings" subtitle="Configure flash sale settings and manage flash products" />
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Card title="Flash Sale Configuration" icon="⚡" className="lg:col-span-1">
+          <Toggle
+            label="Enable Flash Sale"
+            checked={settings.flashSaleEnabled}
+            onChange={(v) => updateSetting("flashSaleEnabled", v)}
+          />
+          <div className="grid grid-cols-1 gap-4 mt-4">
+            <InputField
+              label="Timer Duration (Hours)"
+              type="number"
+              value={settings.flashTimer}
+              onChange={(v) => updateSetting("flashTimer", v)}
+            />
+            <InputField
+              label="Product Limit"
+              type="number"
+              value={settings.productLimit}
+              onChange={(v) => updateSetting("productLimit", v)}
+            />
+          </div>
+          <div className="mt-4 space-y-3">
+            <Toggle
+              label="Auto Expire Flash Sales"
+              checked={settings.autoExpire}
+              onChange={(v) => updateSetting("autoExpire", v)}
+            />
+            <Toggle
+              label="Show on Homepage"
+              checked={settings.homepageFlash}
+              onChange={(v) => updateSetting("homepageFlash", v)}
+            />
+          </div>
+        </Card>
+
+        <Card title="Add Products to Flash Sale" icon="🛒" className="lg:col-span-2 overflow-visible relative z-10">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="lg:col-span-2">
+              <label className="block text-sm font-semibold text-white/90 mb-2">Search product</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search by name or SKU..."
+                  value={flashAddQuery}
+                  onChange={(e) => setFlashAddQuery(e.target.value)}
+                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-orange-400/50 pr-20"
+                />
+                <div className="absolute right-4 top-3.5 flex items-center gap-2">
+                  {flashAddQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setFlashAddQuery("")}
+                      className="text-white/40 hover:text-white transition-colors"
+                    >
+                      ✕
+                    </button>
+                  )}
+                  <span className="text-white/40">🔍</span>
+                </div>
+
+                {!productsCatalogLoading && !productsCatalogError && flashAddQuery.trim() && (
+                  <div className="absolute left-0 right-0 top-full mt-2 bg-[#2d0c2d] rounded-xl border border-white/15 shadow-2xl overflow-hidden z-40 max-h-80 overflow-y-auto">
+                    {flashCandidates.length > 0 ? (
+                      flashCandidates.map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => addFlashProduct(p)}
+                          disabled={flashUpdating}
+                          className="w-full text-left flex items-center justify-between gap-4 p-3 hover:bg-white/10 border-b border-white/10 last:border-b-0 disabled:opacity-60"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            {renderProductThumb(p)}
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-white truncate">{p.name}</p>
+                              <p className="text-xs text-white/50">
+                                {p.price != null ? `৳${p.price}` : "—"}
+                                {p.sku ? ` • ${p.sku}` : ""}
+                              </p>
+                            </div>
+                          </div>
+                          <span className="text-xs font-semibold text-white/70">Add</span>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="p-3 text-sm text-white/60">No products found.</div>
+                    )}
+                  </div>
+                )}
+              </div>
+              {productsCatalogLoading ? <div className="text-sm text-white/50 mt-3">Loading products...</div> : null}
+              {productsCatalogError ? (
+                <div className="flex items-center justify-between gap-3 p-3 bg-red-500/10 border border-red-400/20 rounded-xl mt-3">
+                  <div className="text-sm text-red-200">{productsCatalogError}</div>
+                  <Button variant="secondary" onClick={() => fetchProductsCatalog({ force: true })} className="whitespace-nowrap">
+                    Retry
+                  </Button>
+                </div>
+              ) : null}
+              {!settings.flashSaleEnabled ? (
+                <div className="p-3 bg-amber-500/10 border border-amber-400/20 rounded-xl text-sm text-amber-100 mt-3">
+                  Flash sale is disabled. Enable it first to add products.
+                </div>
+              ) : null}
+              {flashLimit != null && flashProducts.length >= flashLimit ? (
+                <div className="p-3 bg-amber-500/10 border border-amber-400/20 rounded-xl text-sm text-amber-100 mt-3">
+                  Flash sale product limit reached. Increase limit or remove products.
+                </div>
+              ) : null}
+            </div>
+
+            <div className="space-y-4">
+              <InputField
+                label="Discount (%)"
+                type="number"
+                value={flashAddDiscountPercent}
+                onChange={(v) => setFlashAddDiscountPercent(v)}
+                placeholder="e.g. 25"
+              />
+              <Toggle
+                label="Auto set original price"
+                description="If original price is empty, set it from current price"
+                checked={flashAutoSetOriginal}
+                onChange={setFlashAutoSetOriginal}
+              />
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      <Card title="Active Flash Products" icon="🔥" className="overflow-hidden">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="relative flex-1">
+            <input
+              type="search"
+              placeholder="Search inside flash sale..."
+              value={flashSearchQuery}
+              onChange={(e) => setFlashSearchQuery(e.target.value)}
+              className="w-full px-4 py-2.5 rounded-xl bg-white/10 border border-white/15 text-sm text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-orange-400/50"
+            />
+            <span className="absolute right-4 top-2.5 text-white/40">🔍</span>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            <span className="text-sm text-white/50 whitespace-nowrap">
+              <span className="text-orange-300 font-bold">{Array.isArray(flashSelectedIds) ? flashSelectedIds.length : 0}</span> selected
+            </span>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                value={flashBulkDiscountPercent}
+                onChange={(e) => setFlashBulkDiscountPercent(e.target.value)}
+                placeholder="Discount %"
+                className="w-36 px-3 py-2 rounded-xl bg-white/10 border border-white/15 text-sm text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-orange-400/50"
+              />
+              <Button variant="secondary" onClick={applyFlashBulkDiscount} className="whitespace-nowrap">
+                Apply
+              </Button>
+            </div>
+            <Button variant="danger" onClick={bulkRemoveFlash} className="whitespace-nowrap">
+              Remove
+            </Button>
+          </div>
         </div>
-        <div className="mt-4 space-y-3">
-          <Toggle label="Auto Expire Flash Sales" checked={settings.autoExpire} onChange={(v) => updateSetting("autoExpire", v)} />
-          <Toggle label="Show on Homepage" checked={settings.homepageFlash} onChange={(v) => updateSetting("homepageFlash", v)} />
-        </div>
+
+        <Toggle
+          label="Restore original price when removing"
+          description="When removing a product from flash sale, set price = original price and clear original price"
+          checked={flashRestoreOnRemove}
+          onChange={setFlashRestoreOnRemove}
+        />
+
+        {flashProductsFiltered.length === 0 ? (
+          <div className="p-6 rounded-xl bg-white/5 border border-white/10 text-white/50 text-sm">
+            No flash sale products found.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/10">
+                  <th className="px-3 py-3 text-left w-10">
+                    <button
+                      type="button"
+                      onClick={toggleSelectAllFlashFiltered}
+                      className={`w-4.5 h-4.5 rounded border-2 flex items-center justify-center transition-all ${
+                        flashProductsFiltered.every((p) => flashSelectedSet.has(String(p.id)))
+                          ? "bg-gradient-to-r from-orange-300 to-green-400 border-transparent"
+                          : "border-white/30 hover:border-orange-300"
+                      }`}
+                    >
+                      {flashProductsFiltered.every((p) => flashSelectedSet.has(String(p.id))) ? (
+                        <span className="text-[#1a0510] text-[10px] font-black">✓</span>
+                      ) : null}
+                    </button>
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs uppercase tracking-wider text-white/50 font-semibold">Product</th>
+                  <th className="px-3 py-3 text-left text-xs uppercase tracking-wider text-white/50 font-semibold">Price</th>
+                  <th className="px-3 py-3 text-left text-xs uppercase tracking-wider text-white/50 font-semibold">Discount</th>
+                  <th className="px-3 py-3 text-left text-xs uppercase tracking-wider text-white/50 font-semibold">Stock</th>
+                  <th className="px-3 py-3 text-left text-xs uppercase tracking-wider text-white/50 font-semibold w-56">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {flashProductsFiltered.map((p) => {
+                  const o = Number(p.originalPrice);
+                  const s = Number(p.price);
+                  const pct =
+                    Number.isFinite(o) && Number.isFinite(s) && o > 0 && s < o ? Math.round((1 - s / o) * 100) : null;
+                  const isEditing = flashEditId != null && String(flashEditId) === String(p.id);
+                  return (
+                    <tr key={p.id} className="border-b border-white/10 hover:bg-white/5 transition-colors">
+                      <td className="px-3 py-3">
+                        <button
+                          type="button"
+                          onClick={() => toggleFlashSelect(p.id)}
+                          className={`w-4.5 h-4.5 rounded border-2 flex items-center justify-center transition-all ${
+                            flashSelectedSet.has(String(p.id))
+                              ? "bg-gradient-to-r from-orange-300 to-green-400 border-transparent"
+                              : "border-white/30 hover:border-orange-300"
+                          }`}
+                        >
+                          {flashSelectedSet.has(String(p.id)) ? <span className="text-[#1a0510] text-[10px] font-black">✓</span> : null}
+                        </button>
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          {renderProductThumb(p)}
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-white truncate">{p.name}</p>
+                            <p className="text-xs text-white/50">{p.sku || "—"}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3">
+                        {isEditing ? (
+                          <div className="flex flex-col gap-2">
+                            <input
+                              type="number"
+                              value={flashEditSalePrice}
+                              onChange={(e) => setFlashEditSalePrice(e.target.value)}
+                              placeholder="Sale"
+                              className="w-28 px-3 py-2 rounded-xl bg-white/10 border border-white/15 text-sm text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-orange-400/50"
+                            />
+                            <input
+                              type="number"
+                              value={flashEditOriginalPrice}
+                              onChange={(e) => setFlashEditOriginalPrice(e.target.value)}
+                              placeholder="Original"
+                              className="w-28 px-3 py-2 rounded-xl bg-white/10 border border-white/15 text-sm text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-orange-400/50"
+                            />
+                          </div>
+                        ) : (
+                          <div className="flex flex-col">
+                            {p.originalPrice != null ? (
+                              <span className="text-xs text-white/40 line-through">৳{p.originalPrice}</span>
+                            ) : null}
+                            <span className="font-bold text-green-300">৳{p.price ?? "—"}</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
+                        {pct != null ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-orange-300/15 text-orange-200 border border-orange-300/20">
+                            -{pct}%
+                          </span>
+                        ) : (
+                          <span className="text-xs text-white/40">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3 text-white/60">{p.stock ?? "—"}</td>
+                      <td className="px-3 py-3">
+                        {isEditing ? (
+                          <div className="flex items-center gap-2">
+                            <Button variant="secondary" onClick={cancelEditFlash} className="px-4 py-2">
+                              Cancel
+                            </Button>
+                            <Button onClick={saveEditFlash} className="px-4 py-2">
+                              Save
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <Button variant="secondary" onClick={() => startEditFlash(p)} className="px-4 py-2">
+                              Edit
+                            </Button>
+                            <Button variant="danger" onClick={() => removeFlashProduct(p.id)} className="px-4 py-2">
+                              Remove
+                            </Button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
     </div>
   );
@@ -820,9 +1659,9 @@ export default function SettingsPage() {
       <SectionHeader title="Banner Management" subtitle="Upload and schedule promotional banners" />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card title="Banner Uploads" icon="🖼️">
-          <FileUpload label="Homepage Banner" preview={settings.homeBannerPreview} onChange={(e) => updateSetting("homeBannerPreview", URL.createObjectURL(e.target.files[0]))} />
-          <FileUpload label="Offer Banner" preview={settings.offerBannerPreview} onChange={(e) => updateSetting("offerBannerPreview", URL.createObjectURL(e.target.files[0]))} />
-          <FileUpload label="Popup Banner" preview={settings.popupBannerPreview} onChange={(e) => updateSetting("popupBannerPreview", URL.createObjectURL(e.target.files[0]))} />
+          <FileUpload label="Homepage Banner" preview={settings.homeBannerPreview} onChange={onPickImage("homeBannerPreview")} />
+          <FileUpload label="Offer Banner" preview={settings.offerBannerPreview} onChange={onPickImage("offerBannerPreview")} />
+          <FileUpload label="Popup Banner" preview={settings.popupBannerPreview} onChange={onPickImage("popupBannerPreview")} />
         </Card>
         <Card title="Banner Controls" icon="⚙️">
           <Toggle label="Banner Active" checked={settings.bannerActive} onChange={(v) => updateSetting("bannerActive", v)} />
@@ -908,7 +1747,7 @@ export default function SettingsPage() {
       <SectionHeader title="Backup & Database" subtitle="Manage backups and monitor database health" />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card title="Backup Controls" icon="💾">
-          <Button onClick={() => showModal("Manual Backup", "Create a full database backup now?", () => alert("Backup started!"))}>Create Manual Backup</Button>
+          <Button onClick={() => showModal("Manual Backup", "Create a full database backup now?", () => toast.success("Backup started!"))}>Create Manual Backup</Button>
           <div className="mt-4">
             <SelectField label="Auto Backup Schedule" value={settings.autoBackup} onChange={(v) => updateSetting("autoBackup", v)}
               options={[{value:"hourly", label:"Hourly"}, {value:"daily", label:"Daily"}, {value:"weekly", label:"Weekly"}, {value:"monthly", label:"Monthly"}]} />
@@ -939,8 +1778,8 @@ export default function SettingsPage() {
       <SectionHeader title="System Maintenance" subtitle="Clear cache and manage system logs" />
       <Card title="Maintenance Tools" icon="🔧">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Button variant="danger" onClick={() => showModal("Clear Cache", "This will clear all application cache. Continue?", () => alert("Cache cleared!"))}>Clear Cache</Button>
-          <Button onClick={() => alert("System logs downloaded!")}>Download System Logs</Button>
+          <Button variant="danger" onClick={() => showModal("Clear Cache", "This will clear all application cache. Continue?", () => toast.success("Cache cleared!"))}>Clear Cache</Button>
+          <Button onClick={() => toast.success("System logs downloaded!")}>Download System Logs</Button>
           <Toggle label="Debug Mode" description="Enable detailed error reporting" checked={settings.debugMode} onChange={(v) => updateSetting("debugMode", v)} />
         </div>
       </Card>
@@ -1020,12 +1859,77 @@ export default function SettingsPage() {
     </div>
   );
 
+  // --- Products Set Component ---
+  const ProductsSetSettings = () => {
+    const products = productsCatalog;
+    const loading = productsCatalogLoading;
+    const error = productsCatalogError;
+
+    const addUnique = (key, product) => {
+      const current = Array.isArray(settings[key]) ? settings[key] : [];
+      const exists = current.some((p) => String(p.id) === String(product.id));
+      if (!exists) updateSetting(key, [...current, product]);
+    };
+
+    const removeOne = (key, productId) => {
+      const current = Array.isArray(settings[key]) ? settings[key] : [];
+      updateSetting(key, current.filter((p) => String(p.id) !== String(productId)));
+    };
+
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <SectionHeader title="Products Set" subtitle="Manage featured, new arrivals and best selling products" />
+
+        <ProductPicker
+          title="Featured Products"
+          icon="⭐"
+          placeholder="Search products to add..."
+          products={products}
+          loading={loading}
+          error={error}
+          onRetry={() => fetchProductsCatalog({ force: true })}
+          selected={Array.isArray(settings.featuredProducts) ? settings.featuredProducts : []}
+          onAdd={(p) => addUnique("featuredProducts", p)}
+          onRemove={(id) => removeOne("featuredProducts", id)}
+        />
+
+        <ProductPicker
+          title="New Arrivals"
+          icon="🆕"
+          placeholder="Search products to add as new arrivals..."
+          products={products}
+          loading={loading}
+          error={error}
+          onRetry={() => fetchProductsCatalog({ force: true })}
+          selected={Array.isArray(settings.newArrivals) ? settings.newArrivals : []}
+          onAdd={(p) => addUnique("newArrivals", p)}
+          onRemove={(id) => removeOne("newArrivals", id)}
+        />
+
+        <ProductPicker
+          title="Best Selling"
+          icon="🔥"
+          placeholder="Search products to add as best selling..."
+          products={products}
+          loading={loading}
+          error={error}
+          onRetry={() => fetchProductsCatalog({ force: true })}
+          selected={Array.isArray(settings.bestSelling) ? settings.bestSelling : []}
+          onAdd={(p) => addUnique("bestSelling", p)}
+          onRemove={(id) => removeOne("bestSelling", id)}
+          defaultSort="sold_desc"
+        />
+      </div>
+    );
+  };
+
   // --- Tab Mapping ---
   const tabComponents = {
     general: GeneralSettings,
     store: StoreSettings,
     logo: LogoBranding,
     seo: SEOSettings,
+    productsSet: ProductsSetSettings,
     payment: PaymentSettings,
     wallet: WalletSettings,
     flash: FlashSaleSettings,
@@ -1054,7 +1958,7 @@ export default function SettingsPage() {
     advanced: AdvancedSettings,
   };
 
-  const ActiveComponent = tabComponents[activeTab] || GeneralSettings;
+  const ActiveRenderer = tabComponents[activeTab] || GeneralSettings;
 
   return (
     <div className="min-h-screen text-white">
@@ -1096,17 +2000,37 @@ export default function SettingsPage() {
             <h1 className="text-2xl font-bold text-white">Settings</h1>
             <p className="text-sm text-orange-300/70">Manage your application preferences</p>
           </div>
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Search settings..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full sm:w-64 px-4 py-2 bg-white/10 border border-white/10 rounded-xl text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-orange-400/50"
-            />
-            <span className="absolute right-3 top-2.5 text-white/40">🔍</span>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
+            <div className="relative flex-1">
+              <input
+                type="text"
+                placeholder="Search settings..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full sm:w-64 px-4 py-2 bg-white/10 border border-white/10 rounded-xl text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-orange-400/50"
+              />
+              <span className="absolute right-3 top-2.5 text-white/40">🔍</span>
+            </div>
+            <Button onClick={handleSave} className="shadow-2xl shadow-orange-500/30 ring-2 ring-white/20">
+              {settingsSaving ? "💾 Saving..." : "💾 Save Changes"}
+            </Button>
           </div>
         </div>
+
+        {(settingsLoading || settingsError) && (
+          <div className="mb-4">
+            {settingsLoading && (
+              <div className="p-3 bg-white/10 border border-white/10 rounded-xl text-sm text-white/60">
+                Loading settings...
+              </div>
+            )}
+            {!settingsLoading && settingsError && (
+              <div className="p-3 bg-red-500/15 border border-red-400/20 rounded-xl text-sm text-red-200">
+                {settingsError}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Horizontal Scrollable Tabs */}
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
@@ -1139,24 +2063,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Content */}
-      <ActiveComponent />
-
-      {/* Bottom Spacer for sticky button */}
-      <div className="h-24" />
-
-      {/* Sticky Save Button */}
-      <div className={`fixed bottom-6 right-6 z-40 transition-all duration-300 ${saveSticky ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0'}`}>
-        <Button onClick={handleSave} className="shadow-2xl shadow-orange-500/30 ring-2 ring-white/20">
-          💾 Save Changes
-        </Button>
-      </div>
-
-      {/* Mobile Save Button (always visible on mobile) */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-[#3d0c3d] to-transparent z-40">
-        <Button onClick={handleSave} className="w-full shadow-xl">
-          💾 Save All Changes
-        </Button>
-      </div>
+      {ActiveRenderer()}
 
       {/* Modal */}
       <Modal

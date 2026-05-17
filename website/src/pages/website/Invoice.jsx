@@ -1,94 +1,132 @@
 // InvoicePage.jsx
-import  { useRef } from 'react';
-import { useNavigate } from 'react-router';
+import { useRef, useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router';
+import api from '../../api/axios';
 
-// Demo Invoice Data
-const invoiceData = {
-  invoiceNo: 'INV-ACH-2026-8842',
-  orderId: 'ACH-2026-8842',
-  issueDate: '৬ মে, ২০২৬',
-  dueDate: '৮ মে, ২০২৬',
-  
+const formatBnDate = (d) =>
+  d
+    ? new Date(d).toLocaleDateString('bn-BD', { day: 'numeric', month: 'long', year: 'numeric' })
+    : '';
+
+const paymentMethodLabel = (m) =>
+  ({ cod: 'ক্যাশ অন ডেলিভারি', bkash: 'bKash', nagad: 'Nagad' }[m] || m);
+
+const paymentStatusLabel = (s) =>
+  ({ pending: 'অপেক্ষমাণ', paid: 'পরিশোধিত', confirmed: 'নিশ্চিত' }[s] || s);
+
+const buildInvoiceView = (order, settings) => ({
+  invoiceNo: `INV-${order.orderNumber}`,
+  orderId: order.orderNumber,
+  issueDate: formatBnDate(order.createdAt),
+  dueDate: formatBnDate(order.createdAt),
+  monthlySubscription: order.monthlySubscription,
   business: {
-    name: 'আচার ',
-    nameEn: ' Achar ',
-    address: '১২৩, পিকচার প্যালেস মার্কেট,, ঢাকা-১২১৬',
-    phone: '০১৭১২৩৪৫৬৭৮',
-    email: 'support@deshiacharghor.com',
-    website: 'www.deshiacharghor.com',
-    bin: '০০১২৩৪৫৬৭৮৯০'
+    name: settings?.siteName || 'HBC Achar Shop',
+    nameEn: settings?.siteTitle || '',
+    address: settings?.storeAddress || '',
+    phone: settings?.supportPhone || '',
+    email: '',
+    website: '',
+    logo: '🫙',
   },
-
   customer: {
-    name: 'রাহিম উদ্দিন',
-    phone: '০১৭১২৩৪৫৬৭৮',
-    email: 'rahim@email.com',
-    address: 'বাড়ি #৪২, রোড #৩, মিরপুর-১০',
-    district: 'ঢাকা',
-    thana: 'মিরপুর',
-    postcode: '১২১৬'
+    name: order.customer?.fullName || '',
+    phone: order.customer?.phone || '',
+    email: order.customer?.email || '',
+    address: order.customer?.address || '',
+    district: order.customer?.district || '',
+    thana: order.customer?.thana || '',
+    postcode: '',
   },
-
   shipping: {
-    method: 'ঢাকার ভিতরে',
-    charge: 60,
-    address: 'বাড়ি #৪২, রোড #৩, মিরপুর-১০, ঢাকা',
-    note: 'গেটে রাখবেন, ডেলিভারির আগে কল করবেন'
+    method: 'হোম ডেলিভারি',
+    charge: order.pricing?.deliveryCharge || 0,
+    address: order.shipping?.fullAddress || order.customer?.address || '',
+    note: order.orderNote || '',
   },
-
-  items: [
-    {
-      id: 1,
-      name: 'মিষ্টি আমের আচার',
-      nameEn: 'Sweet Mango Pickle',
-      variation: '৫০০গ্রাম জার',
-      sku: 'MNG-500',
-      price: 280,
-      qty: 2,
-      total: 560
-    },
-    {
-      id: 2,
-      name: 'তেতুলের আচার',
-      nameEn: 'Tamarind Pickle',
-      variation: '২৫০গ্রাম জার',
-      sku: 'TML-250',
-      price: 180,
-      qty: 1,
-      total: 180
-    }
-  ],
-
+  items: (order.items || []).map((it) => ({
+    id: it.id,
+    name: it.name,
+    variation: it.variation || it.variationLabel || '',
+    sku: it.productId?.slice(-6) || '',
+    price: it.price,
+    qty: it.qty,
+    total: it.total || it.price * it.qty,
+  })),
   pricing: {
-    subtotal: 740,
-    discount: 74,
-    coupon: 'ACHAR10',
-    delivery: 60,
-    walletUsed: 0,
-    total: 726,
-    totalInWords: 'সাতশত ছাব্বিশ টাকা মাত্র'
+    subtotal: order.pricing?.subtotal || 0,
+    discount: order.pricing?.discount || 0,
+    coupon: order.pricing?.couponCode || '',
+    delivery: order.pricing?.deliveryCharge || 0,
+    walletUsed: order.pricing?.walletUsed || 0,
+    total: order.pricing?.total || 0,
+    totalInWords: `৳${order.pricing?.total || 0}`,
   },
-
   payment: {
-    method: 'ক্যাশ অন ডেলিভারি',
-    status: 'অপেক্ষমাণ',
-    paid: 0,
-    due: 726
-  }
-};
+    method: paymentMethodLabel(order.payment?.method),
+    status: paymentStatusLabel(order.payment?.status),
+    paid: order.payment?.paid || 0,
+    due: order.payment?.due ?? order.pricing?.total,
+  },
+});
 
 export default function InvoicePage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const invoiceRef = useRef(null);
+  const [invoiceData, setInvoiceData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const orderId = searchParams.get('id');
+    if (!orderId) {
+      setError('অর্ডার আইডি পাওয়া যায়নি');
+      setLoading(false);
+      return;
+    }
+    const load = async () => {
+      try {
+        const [orderRes, settingsRes] = await Promise.all([
+          api.get(`/orders/${orderId}`),
+          api.get('/settings/public'),
+        ]);
+        setInvoiceData(buildInvoiceView(orderRes.data, settingsRes.data));
+      } catch (err) {
+        setError(err.response?.data?.message || 'ইনভয়েস লোড করা যায়নি');
+      } finally {
+        setLoading(false);
+      }
+    };
+    void load();
+  }, [searchParams]);
 
   const handlePrint = () => {
     window.print();
   };
 
   const handleDownloadPDF = () => {
-    // In production, use libraries like html2pdf.js or jspdf
-    alert('📄 পিডিএফ ডাউনলোড শুরু হচ্ছে...\n(প্রোডাকশনে html2pdf.js বা jspdf ব্যবহার করুন)');
+    window.print();
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-emerald-700">
+        ইনভয়েস লোড হচ্ছে...
+      </div>
+    );
+  }
+
+  if (error || !invoiceData) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-4">
+        <p className="text-red-600">{error || 'ডাটা পাওয়া যায়নি'}</p>
+        <button type="button" onClick={() => navigate('/')} className="text-orange-600 font-bold">
+          হোমে যান
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-linear-to-br from-orange-50 via-amber-50 to-green-50 print:bg-white">
@@ -216,6 +254,12 @@ export default function InvoicePage() {
               </div>
             </div>
 
+            {invoiceData.monthlySubscription && (
+              <div className="mx-8 mb-4 p-4 bg-amber-50 border border-amber-300 rounded-xl text-center">
+                <p className="text-sm font-bold text-amber-800">প্রতি মাসে কিনতে চাই (Monthly Subscription)</p>
+              </div>
+            )}
+
             {/* Ship To */}
             <div className="bg-white rounded-xl p-5 border border-green-100 shadow-sm">
               <h3 className="text-xs font-bold text-green-600 uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -254,7 +298,7 @@ export default function InvoicePage() {
                     <td className="py-4 px-2">
                       <div>
                         <p className="font-semibold text-gray-800">{item.name}</p>
-                        <p className="text-xs text-gray-500">{item.nameEn}</p>
+                        {item.nameEn ? <p className="text-xs text-gray-500">{item.nameEn}</p> : null}
                         <p className="text-xs text-orange-600 mt-0.5">{item.variation}</p>
                       </div>
                     </td>

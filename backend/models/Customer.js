@@ -1,5 +1,5 @@
-const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
+import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
 
 const walletTransactionSchema = new mongoose.Schema({
   type: { type: String, enum: ['recharge', 'purchase', 'refund', 'cashback', 'deduct', 'admin'], required: true },
@@ -58,13 +58,13 @@ customerSchema.methods.computeLevel = function () {
   else                 this.level = 'Bronze';
 };
 
-customerSchema.pre('save', async function (next) {
+customerSchema.pre('save', async function () {
   if (this.isModified('password')) {
     this.password = await bcrypt.hash(this.password, 10);
   }
   this.computeLevel();
-  next();
 });
+
 
 customerSchema.methods.comparePassword = function (p) {
   return bcrypt.compare(p, this.password);
@@ -77,4 +77,4 @@ customerSchema.methods.toPublic = function () {
   return obj;
 };
 
-module.exports = mongoose.model('Customer', customerSchema);
+export default mongoose.model('Customer', customerSchema);

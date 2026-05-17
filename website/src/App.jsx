@@ -1,4 +1,4 @@
-import { createBrowserRouter, RouterProvider } from "react-router";
+import { createBrowserRouter, RouterProvider, Navigate } from "react-router";
 
 // website page imports
 import Home from "./pages/website/Home.jsx";
@@ -110,7 +110,8 @@ const router = createBrowserRouter([
           {  path: "products",element: <Products />},
           {  path: "orders", element:<Orders/>},
           {  path: "settings", element:<Setting/>},
-          {  path: "customers", element:<Customers/>}
+          {  path: "customers", element:<Customers/>},
+          {  path: "flash-sale", element:<Navigate to="/admin/settings?tab=flash" replace />},
         ]
       },
     ],

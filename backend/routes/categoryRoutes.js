@@ -9,8 +9,9 @@ import { adminAuthMiddleware } from "../middleware/adminAuthMiddleware.js";
 
 const router = express.Router();
 
-router.use(adminAuthMiddleware);
 router.get("/", getCategories);
+
+router.use(adminAuthMiddleware);
 router.post("/", createCategory);
 router.put("/:id", updateCategory);
 router.delete("/:id", deleteCategory);

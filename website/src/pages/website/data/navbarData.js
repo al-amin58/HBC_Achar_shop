@@ -16,14 +16,14 @@ export const initialCartItems = [
 ];
 
 export const categories = [
-  { name: 'All Pickles', icon: '🥒', href: '/category/pickles' },
-  { name: 'Spicy Achar', icon: '🌶️', href: '/category/spicy' },
-  { name: 'Sweet Achar', icon: '🍯', href: '/category/sweet' },
-  { name: 'Combo Packs', icon: '📦', href: '/category/combo' },
-  { name: 'Mango Special', icon: '🥭', href: '/category/mango' },
-  { name: 'Garlic Pickle', icon: '🧄', href: '/category/garlic' },
-  { name: 'Lime Achar', icon: '🍋', href: '/category/lime' },
-  { name: 'New Arrivals', icon: '✨', href: '/category/new' },
+  { name: 'All Pickles', href: '/category/pickles' },
+  { name: 'Spicy Achar', href: '/category/spicy' },
+  { name: 'Sweet Achar', href: '/category/sweet' },
+  { name: 'Combo Packs', href: '/category/combo' },
+  { name: 'Mango Special', href: '/category/mango' },
+  { name: 'Garlic Pickle', href: '/category/garlic' },
+  { name: 'Lime Achar', href: '/category/lime' },
+  { name: 'New Arrivals', href: '/category/new' },
 ];
 
 export const pages = [

@@ -5,14 +5,22 @@ import StickyNavbar from "../../../componets/navbar/MainNavbar.jsx";
 import CategoryBar from "../../../componets/navbar/CategoriesBar.jsx";
 import CartDrawer from "../../../componets/navbar/CartDrawer.jsx";
 import MobileMenu from "../../../componets/navbar/MobileMenu.jsx";
-import { initialCartItems } from "../data/navbarData.js";
+import api from "../../../api/axios";
+import { categories as fallbackCategories } from "../data/navbarData.js";
+import { useCart } from "../../../componets/useCart.jsx";
 import "../styles/navbarAnimations.css";
 
 const Navbar = () => {
   const [isBannerVisible, setIsBannerVisible] = useState(true);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [cartItems, setCartItems] = useState(initialCartItems);
+  const { cart, changeQty, removeFromCart, itemCount, subtotal, cartOpenSignal, openCart } = useCart();
+  const [navCategories, setNavCategories] = useState(fallbackCategories);
+  const [publicSettings, setPublicSettings] = useState({
+    supportPhone: "",
+    storeAddress: "",
+    logoPreview: "",
+  });
 
   // Escape key - global
   useEffect(() => {
@@ -26,31 +34,66 @@ const Navbar = () => {
     return () => window.removeEventListener("keydown", handleEsc);
   }, []);
 
-  // Cart handlers
-  const updateQty = (id, change) => {
-    setCartItems((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? { ...item, qty: Math.max(1, item.qty + change) }
-          : item,
-      ),
-    );
-  };
+  useEffect(() => {
+    let alive = true;
 
-  const removeItem = (id) => {
-    setCartItems((prev) => prev.filter((item) => item.id !== id));
-  };
+    const loadCategories = async () => {
+      try {
+        const res = await api.get("/categories");
+        const rows = Array.isArray(res?.data) ? res.data : [];
+        const mapped = rows
+          .filter((c) => String(c?.status || "").toLowerCase() !== "inactive")
+          .map((c) => {
+            const slug = c?.slug ? String(c.slug) : "";
+            const href = slug ? `/category-products?category=${encodeURIComponent(slug)}` : "/category-products";
+            return {
+              name: c?.name ? String(c.name) : "Category",
+              href,
+            };
+          });
+        if (!alive) return;
+        if (mapped.length > 0) setNavCategories(mapped);
+      } catch {
+        if (!alive) return;
+      }
+    };
 
-  const cartCount = cartItems.reduce((sum, item) => sum + item.qty, 0);
-  const cartTotal = cartItems.reduce(
-    (sum, item) => sum + item.price * item.qty,
-    0,
-  );
+    void loadCategories();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    const loadPublicSettings = async () => {
+      try {
+        const res = await api.get("/settings/public");
+        const data = res?.data && typeof res.data === "object" ? res.data : {};
+        if (!alive) return;
+        setPublicSettings({
+          supportPhone: String(data.supportPhone || ""),
+          storeAddress: String(data.storeAddress || ""),
+          logoPreview: String(data.logoPreview || ""),
+        });
+      } catch {
+        if (!alive) return;
+      }
+    };
+    void loadPublicSettings();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (cartOpenSignal > 0) setIsCartOpen(true);
+  }, [cartOpenSignal]);
 
   return (
     <div>
       {/* TopBar - NOT sticky, scrolls away */}
-      <TopBar />
+      <TopBar supportPhone={publicSettings.supportPhone} storeAddress={publicSettings.storeAddress} />
 
       {/* CampaignBanner - NOT sticky, scrolls away */}
       <CampaignBanner
@@ -60,29 +103,31 @@ const Navbar = () => {
 
       {/* MainNavbar - STICKY only this */}
       <StickyNavbar
-        cartCount={cartCount}
-        onCartOpen={() => setIsCartOpen(true)}
+        cartCount={itemCount}
+        onCartOpen={openCart}
         onMobileMenuOpen={() => setIsMobileMenuOpen(true)}
+        logoUrl={publicSettings.logoPreview}
       />
 
       {/* CategoryBar - NOT sticky, scrolls away */}
-      <CategoryBar />
+      <CategoryBar categories={navCategories} />
 
       {/* Cart Drawer */}
       <CartDrawer
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
-        cartItems={cartItems}
-        onUpdateQty={updateQty}
-        onRemoveItem={removeItem}
-        cartCount={cartCount}
-        cartTotal={cartTotal}
+        cartItems={cart}
+        onUpdateQty={changeQty}
+        onRemoveItem={removeFromCart}
+        cartCount={itemCount}
+        cartTotal={subtotal}
       />
 
       {/* Mobile Menu */}
       <MobileMenu
         isOpen={isMobileMenuOpen}
         onClose={() => setIsMobileMenuOpen(false)}
+        categories={navCategories}
       />
     </div>
   );

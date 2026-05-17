@@ -1,4 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import api from '../../api/axios';
+import { toast } from 'react-toastify';
 
 /* ---------------- Inline SVG Icons ---------------- */
 const I = {
@@ -115,37 +117,6 @@ const Drawer = ({ isOpen, onClose, title, children, w = "w-[480px]" }) => (
 );
 
 /* ---------------- Mock Data ---------------- */
-const genCustomers = () => {
-  const names = ["Rahim Ahmed","Fatima Begum","Karim Hossain","Nusrat Jahan","Tanvir Islam","Sadia Rahman","Imran Khan","Priya Das","Hasan Mahmud","Laila Noor","Shakib Al","Mim Akter","Rafiqul Islam","Tasnim Chowdhury","Junayed Hossain","Ayesha Siddiq","Mahmudul Hasan","Rina Akter","Sohel Rana","Nipa Begum"];
-  const locs = ["Dhaka","Chittagong","Sylhet","Rajshahi","Khulna","Barisal","Rangpur","Mymensingh"];
-  const lvls = ["Bronze","Silver","Gold","Platinum","VIP"];
-  return names.map((n, i) => ({
-    id: `CUST-${1000+i}`, name: n,
-    email: n.toLowerCase().replace(/ /g,'.')+"@email.com",
-    phone: `+880 1${Math.floor(Math.random()*9+3)}${Math.floor(Math.random()*90000000+10000000)}`,
-    location: locs[Math.floor(Math.random()*locs.length)],
-    orders: Math.floor(Math.random()*50)+1,
-    spend: Math.floor(Math.random()*50000)+1000,
-    wallet: Math.floor(Math.random()*5000),
-    rewards: Math.floor(Math.random()*2000),
-    level: lvls[Math.floor(Math.random()*lvls.length)],
-    landingPages: Math.floor(Math.random()*5),
-    status: Math.random()>0.1?"Active":"Blocked",
-    lastLogin: `${Math.floor(Math.random()*23+1)}h ago`,
-    joinDate: `202${Math.floor(Math.random()*4+1)}-${String(Math.floor(Math.random()*12+1)).padStart(2,'0')}-${String(Math.floor(Math.random()*28+1)).padStart(2,'0')}`,
-    avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${n}`,
-  }));
-};
-const customers = genCustomers();
-
-const landReqs = [
-  { id:"LP-001", customer:"Rahim Ahmed", title:"Eid Special Achar Collection", products:8, template:"Grid", date:"2024-05-10", status:"Pending" },
-  { id:"LP-002", customer:"Fatima Begum", title:"Mango Pickle Flash Sale", products:5, template:"Hero", date:"2024-05-09", status:"Approved" },
-  { id:"LP-003", customer:"Karim Hossain", title:"Premium Olive Achar", products:3, template:"Minimal", date:"2024-05-08", status:"Published" },
-  { id:"LP-004", customer:"Nusrat Jahan", title:"Mixed Achar Combo", products:12, template:"Grid", date:"2024-05-07", status:"Under Review" },
-  { id:"LP-005", customer:"Tanvir Islam", title:"Winter Special", products:6, template:"Hero", date:"2024-05-06", status:"Rejected" },
-];
-
 const memLevels = [
   { name:"Bronze", spend:0, cashback:2, discount:0, from:"from-amber-700", to:"to-amber-900", icon:"🥉" },
   { name:"Silver", spend:5000, cashback:4, discount:5, from:"from-slate-400", to:"to-slate-600", icon:"🥈" },
@@ -157,6 +128,8 @@ const memLevels = [
 /* ================= MAIN COMPONENT ================= */
 export default function CustomerManagementPanel() {
   const [section, setSection] = useState("customers");
+  const [customers, setCustomers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState([]);
   const [showFilters, setShowFilters] = useState(false);
@@ -168,6 +141,214 @@ export default function CustomerManagementPanel() {
   const [rewardModal, setRewardModal] = useState(false);
   const [actDrop, setActDrop] = useState(null);
   const [filters, setFilters] = useState({name:"",email:"",phone:"",location:"",level:"",status:"",minSpend:"",minOrders:""});
+  const [walletSummary, setWalletSummary] = useState({ totalWalletBalance: 0, cashbackThisMonth: 0, refundsThisMonth: 0 });
+  const [walletTx, setWalletTx] = useState([]);
+  const [walletLoading, setWalletLoading] = useState(false);
+  const [rewardsSummary, setRewardsSummary] = useState({ totalRewardPoints: 0, redeemedThisMonth: 0, referralThisMonth: 0 });
+  const [rewardTx, setRewardTx] = useState([]);
+  const [rewardsLoading, setRewardsLoading] = useState(false);
+  const [landingReqs, setLandingReqs] = useState([]);
+  const [landingLoading, setLandingLoading] = useState(false);
+  const [landingModal, setLandingModal] = useState(false);
+  const [walletForm, setWalletForm] = useState({ action: "add", amount: "", reason: "" });
+  const [rewardForm, setRewardForm] = useState({ action: "add", points: "", reason: "" });
+  const [landingForm, setLandingForm] = useState({ customerId: "", title: "", products: "", template: "Grid" });
+
+  useEffect(() => {
+    fetchCustomers();
+  }, []);
+
+  useEffect(() => {
+    if (section === "wallet") fetchWallet();
+    if (section === "rewards") fetchRewards();
+    if (section === "landing") fetchLandingRequests();
+  }, [section]);
+
+  useEffect(() => {
+    if (drawer && profTab === "landing") fetchLandingRequests();
+  }, [drawer, profTab]);
+
+  const fetchCustomers = async () => {
+    setLoading(true);
+    try {
+      const response = await api.get('/customers');
+      setCustomers(response.data);
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to fetch customers");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchWallet = async () => {
+    setWalletLoading(true);
+    try {
+      const [s, t] = await Promise.all([
+        api.get('/customers/wallet/summary'),
+        api.get('/customers/wallet/transactions?limit=10'),
+      ]);
+      setWalletSummary(s.data);
+      setWalletTx(t.data);
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to fetch wallet data");
+    } finally {
+      setWalletLoading(false);
+    }
+  };
+
+  const fetchRewards = async () => {
+    setRewardsLoading(true);
+    try {
+      const [s, t] = await Promise.all([
+        api.get('/customers/rewards/summary'),
+        api.get('/customers/rewards/transactions?limit=10'),
+      ]);
+      setRewardsSummary(s.data);
+      setRewardTx(t.data);
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to fetch rewards data");
+    } finally {
+      setRewardsLoading(false);
+    }
+  };
+
+  const fetchLandingRequests = async () => {
+    setLandingLoading(true);
+    try {
+      const response = await api.get('/customers/landing-requests');
+      setLandingReqs(response.data);
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to fetch landing requests");
+    } finally {
+      setLandingLoading(false);
+    }
+  };
+
+  const submitWalletBulk = async () => {
+    const ids = selected.length > 0 ? selected : (selCust?._id ? [selCust._id] : []);
+    const amount = Number(walletForm.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error("Enter a valid amount.");
+      return;
+    }
+    try {
+      await api.post('/customers/wallet/bulk', {
+        ids,
+        action: walletForm.action,
+        amount,
+        reason: walletForm.reason,
+      });
+      toast.success("Wallet updated.");
+      setWalletModal(false);
+      setWalletForm({ action: "add", amount: "", reason: "" });
+      await fetchCustomers();
+      await fetchWallet();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Wallet update failed");
+    }
+  };
+
+  const submitRewardsBulk = async () => {
+    const ids = selected.length > 0 ? selected : (selCust?._id ? [selCust._id] : []);
+    const points = Number(rewardForm.points);
+    if (!Number.isFinite(points) || points <= 0) {
+      toast.error("Enter valid points.");
+      return;
+    }
+    try {
+      await api.post('/customers/rewards/bulk', {
+        ids,
+        action: rewardForm.action,
+        points,
+        reason: rewardForm.reason,
+      });
+      toast.success("Rewards updated.");
+      setRewardModal(false);
+      setRewardForm({ action: "add", points: "", reason: "" });
+      await fetchCustomers();
+      await fetchRewards();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Rewards update failed");
+    }
+  };
+
+  const submitLandingRequest = async () => {
+    const products = landingForm.products === "" ? 0 : Number(landingForm.products);
+    if (!landingForm.customerId) {
+      toast.error("Select a customer.");
+      return;
+    }
+    if (!landingForm.title.trim()) {
+      toast.error("Enter a title.");
+      return;
+    }
+    if (landingForm.products !== "" && (!Number.isFinite(products) || products < 0)) {
+      toast.error("Invalid products number.");
+      return;
+    }
+    try {
+      await api.post('/customers/landing-requests', {
+        customerId: landingForm.customerId,
+        title: landingForm.title,
+        products,
+        template: landingForm.template,
+      });
+      toast.success("Request created.");
+      setLandingModal(false);
+      setLandingForm({ customerId: "", title: "", products: "", template: "Grid" });
+      await fetchLandingRequests();
+    } catch (err) {
+      const status = err?.response?.status;
+      if (status === 404) {
+        toast.error("Create failed (404). Backend route not running. Restart backend server.");
+        return;
+      }
+      toast.error(err?.response?.data?.message || `Create failed${status ? ` (${status})` : ''}`);
+    }
+  };
+
+  const setLandingStatus = async (id, status) => {
+    try {
+      await api.put(`/customers/landing-requests/${id}`, { status });
+      toast.success("Status updated.");
+      await fetchLandingRequests();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Update failed");
+    }
+  };
+
+  const deleteLanding = async (id) => {
+    if (!window.confirm("Delete this request?")) return;
+    try {
+      await api.delete(`/customers/landing-requests/${id}`);
+      toast.success("Request deleted.");
+      await fetchLandingRequests();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Delete failed");
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this customer?")) return;
+    try {
+      await api.delete(`/customers/${id}`);
+      toast.success("Customer deleted successfully");
+      fetchCustomers();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Delete failed");
+    }
+  };
+
+  const toggleStatus = async (customer) => {
+    const newStatus = customer.status === "Active" ? "Blocked" : "Active";
+    try {
+      await api.put(`/customers/${customer._id}`, { status: newStatus });
+      toast.success(`Customer ${newStatus.toLowerCase()} successfully`);
+      fetchCustomers();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Update failed");
+    }
+  };
 
   const menu = [
     { id:"customers", label:"All Customers", icon:I.Users },
@@ -184,19 +365,21 @@ export default function CustomerManagementPanel() {
     if (filters.location && c.location !== filters.location) return false;
     if (filters.level && c.level !== filters.level) return false;
     if (filters.status && c.status !== filters.status) return false;
-    if (filters.minSpend && c.spend < Number(filters.minSpend)) return false;
-    if (filters.minOrders && c.orders < Number(filters.minOrders)) return false;
+    if (filters.minSpend && c.totalSpend < Number(filters.minSpend)) return false;
+    if (filters.minOrders && c.totalOrders < Number(filters.minOrders)) return false;
     return true;
-  }), [search, filters]);
+  }), [search, filters, customers]);
 
   const toggleSel = (id) => setSelected(p => p.includes(id)?p.filter(x=>x!==id):[...p,id]);
-  const selAll = () => setSelected(selected.length===filtered.length?[]:filtered.map(c=>c.id));
+  const selAll = () => setSelected(selected.length===filtered.length?[]:filtered.map(c=>c._id));
   const openProf = (c) => { setSelCust(c); setDrawer(true); setProfTab("overview"); };
 
   /* ---------- VIEWS ---------- */
-  const CustomersView = () => (
-    <div className="space-y-4 animate-fade-in">
-      <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
+  const CustomersView = () => {
+    if (loading) return <div className="p-12 text-center"><div className="animate-spin text-4xl mb-3">⏳</div><h3 className="text-lg font-medium text-white/80">Loading customers...</h3></div>;
+    return (
+      <div className="space-y-4 animate-fade-in">
+        <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
         <div className="flex items-center gap-3 w-full lg:w-auto">
           <div className="relative flex-1 lg:w-80">
             <I.Search c="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40"/>
@@ -254,24 +437,24 @@ export default function CustomerManagementPanel() {
             </tr></thead>
             <tbody className="divide-y divide-white/5">
               {filtered.map(c=> (
-                <tr key={c.id} className="hover:bg-white/3 transition-colors group">
-                  <td className="p-4"><input type="checkbox" checked={selected.includes(c.id)} onChange={()=>toggleSel(c.id)} className="rounded border-white/20 bg-white/5 text-orange-500"/></td>
+                <tr key={c._id} className="hover:bg-white/3 transition-colors group">
+                  <td className="p-4"><input type="checkbox" checked={selected.includes(c._id)} onChange={()=>toggleSel(c._id)} className="rounded border-white/20 bg-white/5 text-orange-500"/></td>
                   <td className="p-4"><div className="flex items-center gap-3">
-                    <img src={c.avatar} alt="" className="w-10 h-10 rounded-full bg-white/10 border border-white/10"/>
-                    <div><div className="text-sm font-medium text-white">{c.name}</div><div className="text-xs text-white/40">{c.id}</div></div>
+                    <img src={c.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${c.name}`} alt="" className="w-10 h-10 rounded-full bg-white/10 border border-white/10"/>
+                    <div><div className="text-sm font-medium text-white">{c.name}</div><div className="text-xs text-white/40">{c._id.substring(0,8)}</div></div>
                   </div></td>
                   <td className="p-4"><div className="text-sm text-white/80">{c.email}</div><div className="text-xs text-white/40">{c.phone}</div></td>
                   <td className="p-4 text-sm text-white/70">{c.location}</td>
-                  <td className="p-4 text-sm text-white/70">{c.orders}</td>
-                  <td className="p-4 text-sm font-medium text-white">৳{c.spend.toLocaleString()}</td>
-                  <td className="p-4 text-sm text-green-300">৳{c.wallet}</td>
-                  <td className="p-4 text-sm text-orange-300">{c.rewards} pts</td>
+                  <td className="p-4 text-sm text-white/70">{c.totalOrders}</td>
+                  <td className="p-4 text-sm font-medium text-white">৳{c.totalSpend.toLocaleString()}</td>
+                  <td className="p-4 text-sm text-green-300">৳{c.walletBalance}</td>
+                  <td className="p-4 text-sm text-orange-300">{c.rewardPoints} pts</td>
                   <td className="p-4"><Badge color={c.level==="VIP"?"purple":c.level==="Gold"?"yellow":c.level==="Silver"?"gray":"orange"}>{c.level}</Badge></td>
                   <td className="p-4"><Badge color={c.status==="Active"?"green":"red"}>{c.status}</Badge></td>
                   <td className="p-4">
                     <div className="relative">
-                      <button onClick={()=>setActDrop(actDrop===c.id?null:c.id)} className="p-1.5 rounded-lg hover:bg-white/10 text-white/60"><I.MoreVertical c="w-4 h-4"/></button>
-                      {actDrop===c.id && (
+                      <button onClick={()=>setActDrop(actDrop===c._id?null:c._id)} className="p-1.5 rounded-lg hover:bg-white/10 text-white/60"><I.MoreVertical c="w-4 h-4"/></button>
+                      {actDrop===c._id && (
                         <div className="absolute right-0 mt-1 w-48 bg-[#2a0a2a] border border-white/10 rounded-xl shadow-xl z-30 py-1 animate-fade-in">
                           <button onClick={()=>{openProf(c);setActDrop(null);}} className="w-full text-left px-4 py-2 text-sm text-white/80 hover:bg-white/5 flex items-center gap-2"><I.Eye c="w-4 h-4"/> View Profile</button>
                           <button onClick={()=>setActDrop(null)} className="w-full text-left px-4 py-2 text-sm text-white/80 hover:bg-white/5 flex items-center gap-2"><I.Edit c="w-4 h-4"/> Edit</button>
@@ -279,8 +462,8 @@ export default function CustomerManagementPanel() {
                           <button onClick={()=>setActDrop(null)} className="w-full text-left px-4 py-2 text-sm text-white/80 hover:bg-white/5 flex items-center gap-2"><I.Gift c="w-4 h-4"/> Rewards</button>
                           <button onClick={()=>setActDrop(null)} className="w-full text-left px-4 py-2 text-sm text-white/80 hover:bg-white/5 flex items-center gap-2"><I.Package c="w-4 h-4"/> Orders</button>
                           <div className="border-t border-white/10 my-1"/>
-                          <button onClick={()=>setActDrop(null)} className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-white/5 flex items-center gap-2"><I.Lock c="w-4 h-4"/> Block</button>
-                          <button onClick={()=>setActDrop(null)} className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-white/5 flex items-center gap-2"><I.Trash c="w-4 h-4"/> Delete</button>
+                          <button onClick={()=>{toggleStatus(c); setActDrop(null);}} className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-white/5 flex items-center gap-2"><I.Lock c="w-4 h-4"/> {c.status==="Active"?"Block":"Unblock"}</button>
+                          <button onClick={()=>{handleDelete(c._id); setActDrop(null);}} className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-white/5 flex items-center gap-2"><I.Trash c="w-4 h-4"/> Delete</button>
                         </div>
                       )}
                     </div>
@@ -305,138 +488,176 @@ export default function CustomerManagementPanel() {
       </Card>
     </div>
   );
+};
 
-  const WalletView = () => (
-    <div className="space-y-6 animate-fade-in">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <GradCard from="from-orange-400" to="to-red-500" className="p-6">
-          <div className="text-sm text-white/80 mb-1">Total Wallet Balance</div>
-          <div className="text-3xl font-bold text-white">৳24,58,900</div>
-          <div className="text-xs text-white/60 mt-2">Across all customers</div>
-        </GradCard>
-        <Card className="p-6">
-          <div className="text-sm text-white/70 mb-1">Total Cashback Given</div>
-          <div className="text-3xl font-bold text-green-300">৳3,42,000</div>
-          <div className="text-xs text-white/40 mt-2">This month</div>
-        </Card>
-        <Card className="p-6">
-          <div className="text-sm text-white/70 mb-1">Total Refunds</div>
-          <div className="text-3xl font-bold text-orange-300">৳89,500</div>
-          <div className="text-xs text-white/40 mt-2">Auto-refunded to wallets</div>
-        </Card>
-      </div>
-      <Card className="p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-white">Recent Wallet Transactions</h3>
-          <Btn variant="secondary"><I.Download c="w-4 h-4"/> Export</Btn>
+  const WalletView = () => {
+    if (walletLoading) return <div className="p-12 text-center"><div className="animate-spin text-4xl mb-3">⏳</div><h3 className="text-lg font-medium text-white/80">Loading wallet...</h3></div>;
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <GradCard from="from-orange-400" to="to-red-500" className="p-6">
+            <div className="text-sm text-white/80 mb-1">Total Wallet Balance</div>
+            <div className="text-3xl font-bold text-white">৳{Number(walletSummary.totalWalletBalance || 0).toLocaleString()}</div>
+            <div className="text-xs text-white/60 mt-2">Across all customers</div>
+          </GradCard>
+          <Card className="p-6">
+            <div className="text-sm text-white/70 mb-1">Total Cashback Given</div>
+            <div className="text-3xl font-bold text-green-300">৳{Number(walletSummary.cashbackThisMonth || 0).toLocaleString()}</div>
+            <div className="text-xs text-white/40 mt-2">This month</div>
+          </Card>
+          <Card className="p-6">
+            <div className="text-sm text-white/70 mb-1">Total Refunds</div>
+            <div className="text-3xl font-bold text-orange-300">৳{Number(walletSummary.refundsThisMonth || 0).toLocaleString()}</div>
+            <div className="text-xs text-white/40 mt-2">This month</div>
+          </Card>
         </div>
-        <div className="space-y-3">
-          {[
-            {user:"Rahim Ahmed",type:"Recharge",amount:5000,date:"2 mins ago",status:"Success"},
-            {user:"Fatima Begum",type:"Cashback",amount:250,date:"15 mins ago",status:"Success"},
-            {user:"Karim Hossain",type:"Purchase",amount:-1200,date:"1 hour ago",status:"Success"},
-            {user:"Nusrat Jahan",type:"Refund",amount:3400,date:"3 hours ago",status:"Success"},
-            {user:"Tanvir Islam",type:"Recharge",amount:1000,date:"5 hours ago",status:"Pending"},
-          ].map((tx,i) => (
-            <div key={i} className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5 hover:bg-white/[0.07] transition-colors">
-              <div className="flex items-center gap-4">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${tx.amount>0?'bg-green-500/20 text-green-300':'bg-red-500/20 text-red-300'}`}>
-                  {tx.amount>0?<I.Plus c="w-5 h-5"/>:<I.Minus c="w-5 h-5"/>}
-                </div>
-                <div><div className="text-sm font-medium text-white">{tx.user}</div><div className="text-xs text-white/40">{tx.type} • {tx.date}</div></div>
-              </div>
-              <div className="text-right">
-                <div className={`text-sm font-bold ${tx.amount>0?'text-green-300':'text-red-300'}`}>{tx.amount>0?'+':''}৳{Math.abs(tx.amount)}</div>
-                <Badge color={tx.status==="Success"?"green":"yellow"}>{tx.status}</Badge>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
-    </div>
-  );
-
-  const RewardsView = () => (
-    <div className="space-y-6 animate-fade-in">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <GradCard from="from-purple-400" to="to-pink-600" className="p-6">
-          <div className="text-sm text-white/80 mb-1">Total Reward Points</div>
-          <div className="text-3xl font-bold text-white">4,56,000</div>
-          <div className="text-xs text-white/60 mt-2">Active in system</div>
-        </GradCard>
         <Card className="p-6">
-          <div className="text-sm text-white/70 mb-1">Points Redeemed</div>
-          <div className="text-3xl font-bold text-orange-300">1,23,500</div>
-          <div className="text-xs text-white/40 mt-2">This month</div>
-        </Card>
-        <Card className="p-6">
-          <div className="text-sm text-white/70 mb-1">Referral Bonus Given</div>
-          <div className="text-3xl font-bold text-blue-300">45,200</div>
-          <div className="text-xs text-white/40 mt-2">Points</div>
-        </Card>
-      </div>
-      <Card className="p-6">
-        <h3 className="text-lg font-bold text-white mb-4">Reward History</h3>
-        <div className="space-y-2">
-          {customers.slice(0,8).map((c,i) => (
-            <div key={i} className="flex items-center justify-between p-3 rounded-lg hover:bg-white/5 transition-colors">
-              <div className="flex items-center gap-3">
-                <img src={c.avatar} alt="" className="w-8 h-8 rounded-full bg-white/10"/>
-                <div><div className="text-sm text-white/90">{c.name}</div><div className="text-xs text-white/40">{c.level} Member</div></div>
-              </div>
-              <div className="text-right"><div className="text-sm font-bold text-orange-300">+{Math.floor(c.spend*0.05)} pts</div><div className="text-xs text-white/40">from orders</div></div>
-            </div>
-          ))}
-        </div>
-      </Card>
-    </div>
-  );
-
-  const LandingView = () => (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-white">Landing Page Requests</h2>
-        <Btn><I.Plus c="w-4 h-4"/> Create Request</Btn>
-      </div>
-      <Card hover={false} className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead><tr className="border-b border-white/10 bg-white/5">
-              <th className="p-4 text-xs font-semibold text-white/50 uppercase">Request ID</th>
-              <th className="p-4 text-xs font-semibold text-white/50 uppercase">Customer</th>
-              <th className="p-4 text-xs font-semibold text-white/50 uppercase">Title</th>
-              <th className="p-4 text-xs font-semibold text-white/50 uppercase">Products</th>
-              <th className="p-4 text-xs font-semibold text-white/50 uppercase">Template</th>
-              <th className="p-4 text-xs font-semibold text-white/50 uppercase">Date</th>
-              <th className="p-4 text-xs font-semibold text-white/50 uppercase">Status</th>
-              <th className="p-4 text-xs font-semibold text-white/50 uppercase">Actions</th>
-            </tr></thead>
-            <tbody className="divide-y divide-white/5">
-              {landReqs.map(req=> (
-                <tr key={req.id} className="hover:bg-white/3 transition-colors">
-                  <td className="p-4 text-sm font-mono text-white/70">{req.id}</td>
-                  <td className="p-4 text-sm text-white/90">{req.customer}</td>
-                  <td className="p-4 text-sm text-white/90">{req.title}</td>
-                  <td className="p-4 text-sm text-white/70">{req.products}</td>
-                  <td className="p-4"><Badge color="blue">{req.template}</Badge></td>
-                  <td className="p-4 text-sm text-white/60">{req.date}</td>
-                  <td className="p-4"><Badge color={req.status==="Published"?"green":req.status==="Approved"?"blue":req.status==="Pending"?"yellow":req.status==="Rejected"?"red":"purple"}>{req.status}</Badge></td>
-                  <td className="p-4">
-                    <div className="flex gap-1">
-                      <button className="p-1.5 rounded-lg hover:bg-white/10 text-white/60"><I.Eye c="w-4 h-4"/></button>
-                      {req.status==="Pending" && <button className="p-1.5 rounded-lg hover:bg-green-500/20 text-green-400"><I.Check c="w-4 h-4"/></button>}
-                      {req.status==="Pending" && <button className="p-1.5 rounded-lg hover:bg-red-500/20 text-red-400"><I.Close c="w-4 h-4"/></button>}
-                      <button className="p-1.5 rounded-lg hover:bg-white/10 text-white/60"><I.Trash c="w-4 h-4"/></button>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-white">Recent Wallet Transactions</h3>
+            <Btn variant="secondary" onClick={()=>{}}><I.Download c="w-4 h-4"/> Export</Btn>
+          </div>
+          {walletTx.length === 0 ? (
+            <div className="text-center py-8 text-white/40 text-sm">No transactions yet</div>
+          ) : (
+            <div className="space-y-3">
+              {walletTx.map((tx, i) => {
+                const amt = Number(tx.amount || 0);
+                const positive = amt > 0;
+                const when = tx.date ? new Date(tx.date).toLocaleString() : '';
+                return (
+                  <div key={i} className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5 hover:bg-white/[0.07] transition-colors">
+                    <div className="flex items-center gap-4">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${positive?'bg-green-500/20 text-green-300':'bg-red-500/20 text-red-300'}`}>
+                        {positive ? <I.Plus c="w-5 h-5"/> : <I.Minus c="w-5 h-5"/>}
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-white">{tx.user}</div>
+                        <div className="text-xs text-white/40">{String(tx.type || '').toUpperCase()} • {when}</div>
+                      </div>
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    <div className="text-right">
+                      <div className={`text-sm font-bold ${positive?'text-green-300':'text-red-300'}`}>{positive?'+':''}৳{Math.abs(amt)}</div>
+                      <Badge color={tx.status==="Success"?"green":"yellow"}>{tx.status || 'Success'}</Badge>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+      </div>
+    );
+  };
+
+  const RewardsView = () => {
+    if (rewardsLoading) return <div className="p-12 text-center"><div className="animate-spin text-4xl mb-3">⏳</div><h3 className="text-lg font-medium text-white/80">Loading rewards...</h3></div>;
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <GradCard from="from-purple-400" to="to-pink-600" className="p-6">
+            <div className="text-sm text-white/80 mb-1">Total Reward Points</div>
+            <div className="text-3xl font-bold text-white">{Number(rewardsSummary.totalRewardPoints || 0).toLocaleString()}</div>
+            <div className="text-xs text-white/60 mt-2">Active in system</div>
+          </GradCard>
+          <Card className="p-6">
+            <div className="text-sm text-white/70 mb-1">Points Redeemed</div>
+            <div className="text-3xl font-bold text-orange-300">{Number(rewardsSummary.redeemedThisMonth || 0).toLocaleString()}</div>
+            <div className="text-xs text-white/40 mt-2">This month</div>
+          </Card>
+          <Card className="p-6">
+            <div className="text-sm text-white/70 mb-1">Referral Bonus Given</div>
+            <div className="text-3xl font-bold text-blue-300">{Number(rewardsSummary.referralThisMonth || 0).toLocaleString()}</div>
+            <div className="text-xs text-white/40 mt-2">This month</div>
+          </Card>
         </div>
-      </Card>
-    </div>
-  );
+        <Card className="p-6">
+          <h3 className="text-lg font-bold text-white mb-4">Reward History</h3>
+          {rewardTx.length === 0 ? (
+            <div className="text-center py-8 text-white/40 text-sm">No reward transactions yet</div>
+          ) : (
+            <div className="space-y-2">
+              {rewardTx.map((tx, i) => {
+                const pts = Number(tx.points || 0);
+                const positive = pts > 0;
+                const when = tx.date ? new Date(tx.date).toLocaleString() : '';
+                return (
+                  <div key={i} className="flex items-center justify-between p-3 rounded-lg hover:bg-white/5 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <img src={tx.avatar} alt="" className="w-8 h-8 rounded-full bg-white/10"/>
+                      <div>
+                        <div className="text-sm text-white/90">{tx.user}</div>
+                        <div className="text-xs text-white/40">{String(tx.type || '').toUpperCase()} • {when}</div>
+                      </div>
+                    </div>
+                    <div className={`text-sm font-bold ${positive ? 'text-green-300' : 'text-red-300'}`}>{positive ? '+' : '-'}{Math.abs(pts)} pts</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+      </div>
+    );
+  };
+
+  const LandingView = () => {
+    if (landingLoading) return <div className="p-12 text-center"><div className="animate-spin text-4xl mb-3">⏳</div><h3 className="text-lg font-medium text-white/80">Loading requests...</h3></div>;
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold text-white">Landing Page Requests</h2>
+          <Btn onClick={() => { setLandingModal(true); fetchCustomers(); }}><I.Plus c="w-4 h-4"/> Create Request</Btn>
+        </div>
+        <Card hover={false} className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead><tr className="border-b border-white/10 bg-white/5">
+                <th className="p-4 text-xs font-semibold text-white/50 uppercase">Request ID</th>
+                <th className="p-4 text-xs font-semibold text-white/50 uppercase">Customer</th>
+                <th className="p-4 text-xs font-semibold text-white/50 uppercase">Title</th>
+                <th className="p-4 text-xs font-semibold text-white/50 uppercase">Products</th>
+                <th className="p-4 text-xs font-semibold text-white/50 uppercase">Template</th>
+                <th className="p-4 text-xs font-semibold text-white/50 uppercase">Date</th>
+                <th className="p-4 text-xs font-semibold text-white/50 uppercase">Status</th>
+                <th className="p-4 text-xs font-semibold text-white/50 uppercase">Actions</th>
+              </tr></thead>
+              <tbody className="divide-y divide-white/5">
+                {landingReqs.map(req => (
+                  <tr key={req._id} className="hover:bg-white/3 transition-colors">
+                    <td className="p-4 text-sm font-mono text-white/70">{String(req._id).slice(0,8)}</td>
+                    <td className="p-4 text-sm text-white/90">{req.customer}</td>
+                    <td className="p-4 text-sm text-white/90">{req.title}</td>
+                    <td className="p-4 text-sm text-white/70">{req.products}</td>
+                    <td className="p-4"><Badge color="blue">{req.template}</Badge></td>
+                    <td className="p-4 text-sm text-white/60">{req.date ? new Date(req.date).toLocaleDateString() : ''}</td>
+                    <td className="p-4"><Badge color={req.status==="Published"?"green":req.status==="Approved"?"blue":req.status==="Pending"?"yellow":req.status==="Rejected"?"red":"purple"}>{req.status}</Badge></td>
+                    <td className="p-4">
+                      <div className="flex gap-1">
+                        <button className="p-1.5 rounded-lg hover:bg-white/10 text-white/60" onClick={()=>{}}><I.Eye c="w-4 h-4"/></button>
+                        {(req.status==="Pending" || req.status==="Under Review") && (
+                          <button className="p-1.5 rounded-lg hover:bg-green-500/20 text-green-400" onClick={() => setLandingStatus(req._id, "Approved")}><I.Check c="w-4 h-4"/></button>
+                        )}
+                        {(req.status==="Pending" || req.status==="Under Review") && (
+                          <button className="p-1.5 rounded-lg hover:bg-red-500/20 text-red-400" onClick={() => setLandingStatus(req._id, "Rejected")}><I.Close c="w-4 h-4"/></button>
+                        )}
+                        {req.status==="Approved" && (
+                          <button className="p-1.5 rounded-lg hover:bg-green-500/20 text-green-400" onClick={() => setLandingStatus(req._id, "Published")}><I.Check c="w-4 h-4"/></button>
+                        )}
+                        <button className="p-1.5 rounded-lg hover:bg-white/10 text-white/60" onClick={() => deleteLanding(req._id)}><I.Trash c="w-4 h-4"/></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {landingReqs.length === 0 && (
+            <div className="p-12 text-center"><div className="text-4xl mb-3">📄</div><h3 className="text-lg font-medium text-white/80">No requests yet</h3><p className="text-sm text-white/40 mt-1">Create a landing request to get started</p></div>
+          )}
+        </Card>
+      </div>
+    );
+  };
 
   const sections = {
     customers: CustomersView,
@@ -491,9 +712,9 @@ export default function CustomerManagementPanel() {
         {selCust && (
           <div className="space-y-6">
             <div className="text-center">
-              <img src={selCust.avatar} alt="" className="w-24 h-24 rounded-full bg-white/10 mx-auto mb-3 border-4 border-orange-500/20"/>
+              <img src={selCust.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${selCust.name}`} alt="" className="w-24 h-24 rounded-full bg-white/10 mx-auto mb-3 border-4 border-orange-500/20"/>
               <h3 className="text-xl font-bold text-white">{selCust.name}</h3>
-              <p className="text-sm text-white/50">{selCust.id}</p>
+              <p className="text-sm text-white/50">{selCust._id}</p>
               <div className="flex items-center justify-center gap-2 mt-2">
                 <Badge color={selCust.level==="VIP"?"purple":"orange"}>{selCust.level}</Badge>
                 <Badge color={selCust.status==="Active"?"green":"red"}>{selCust.status}</Badge>
@@ -507,7 +728,7 @@ export default function CustomerManagementPanel() {
             {profTab==="overview" && (
               <div className="space-y-4 animate-fade-in">
                 <div className="grid grid-cols-2 gap-3">
-                  {[{l:"Total Orders",v:selCust.orders},{l:"Total Spend",v:`৳${selCust.spend.toLocaleString()}`},{l:"Wallet",v:`৳${selCust.wallet}`},{l:"Rewards",v:`${selCust.rewards} pts`}].map((s,i)=> (
+                  {[{l:"Total Orders",v:selCust.totalOrders},{l:"Total Spend",v:`৳${selCust.totalSpend.toLocaleString()}`},{l:"Wallet",v:`৳${selCust.walletBalance}`},{l:"Rewards",v:`${selCust.rewardPoints} pts`}].map((s,i)=> (
                     <Card key={i} className="p-4 text-center"><div className="text-lg font-bold text-white">{s.v}</div><div className="text-xs text-white/50">{s.l}</div></Card>
                   ))}
                 </div>
@@ -516,7 +737,7 @@ export default function CustomerManagementPanel() {
                   <div className="flex items-center gap-3 text-sm text-white/70"><I.Mail c="w-4 h-4 text-white/40"/> {selCust.email}</div>
                   <div className="flex items-center gap-3 text-sm text-white/70"><I.Phone c="w-4 h-4 text-white/40"/> {selCust.phone}</div>
                   <div className="flex items-center gap-3 text-sm text-white/70"><I.MapPin c="w-4 h-4 text-white/40"/> {selCust.location}</div>
-                  <div className="flex items-center gap-3 text-sm text-white/70"><I.Calendar c="w-4 h-4 text-white/40"/> Joined {selCust.joinDate}</div>
+                  <div className="flex items-center gap-3 text-sm text-white/70"><I.Calendar c="w-4 h-4 text-white/40"/> Joined {new Date(selCust.createdAt).toLocaleDateString()}</div>
                 </Card>
               </div>
             )}
@@ -535,25 +756,25 @@ export default function CustomerManagementPanel() {
               <div className="space-y-4 animate-fade-in">
                 <GradCard from="from-orange-400" to="to-red-500" className="p-5 text-center">
                   <div className="text-sm text-white/80">Current Balance</div>
-                  <div className="text-3xl font-bold text-white mt-1">৳{selCust.wallet}</div>
+                  <div className="text-3xl font-bold text-white mt-1">৳{selCust.walletBalance}</div>
                 </GradCard>
                 <div className="flex gap-2"><Btn className="flex-1" onClick={()=>setWalletModal(true)}><I.Plus c="w-4 h-4"/> Add</Btn><Btn variant="secondary" className="flex-1"><I.CreditCard c="w-4 h-4"/> History</Btn></div>
               </div>
             )}
             {profTab==="rewards" && (
               <div className="space-y-4 animate-fade-in">
-                <Card className="p-5 text-center"><div className="text-sm text-white/60">Available Points</div><div className="text-3xl font-bold text-orange-300 mt-1">{selCust.rewards}</div></Card>
+                <Card className="p-5 text-center"><div className="text-sm text-white/60">Available Points</div><div className="text-3xl font-bold text-orange-300 mt-1">{selCust.rewardPoints}</div></Card>
                 <Btn onClick={()=>setRewardModal(true)}><I.Plus c="w-4 h-4"/> Add Points</Btn>
               </div>
             )}
             {profTab==="landing" && (
               <div className="space-y-3 animate-fade-in">
-                {landReqs.filter(l=>l.customer===selCust.name).map((lp,i)=> (
+                {landingReqs.filter(l=>String(l.customerId)===String(selCust._id)).map((lp,i)=> (
                   <Card key={i} className="p-4">
                     <div className="flex items-center justify-between"><div><div className="text-sm font-medium text-white">{lp.title}</div><div className="text-xs text-white/40">{lp.template} • {lp.products} products</div></div><Badge color={lp.status==="Published"?"green":"yellow"}>{lp.status}</Badge></div>
                   </Card>
                 ))}
-                {landReqs.filter(l=>l.customer===selCust.name).length===0 && <div className="text-center py-8 text-white/40 text-sm">No landing pages yet</div>}
+                {landingReqs.filter(l=>String(l.customerId)===String(selCust._id)).length===0 && <div className="text-center py-8 text-white/40 text-sm">No landing pages yet</div>}
               </div>
             )}
             {profTab==="activity" && (
@@ -582,19 +803,46 @@ export default function CustomerManagementPanel() {
 
       <Modal isOpen={walletModal} onClose={()=>setWalletModal(false)} title="Manage Wallet" maxW="max-w-sm">
         <div className="space-y-4">
-          <Sel label="Action" value="add" onChange={()=>{}} options={[{value:"add",label:"Add Balance"},{value:"deduct",label:"Deduct Balance"}]}/>
-          <Inp label="Amount (৳)" type="number" value="" onChange={()=>{}} placeholder="0.00"/>
-          <div className="space-y-1.5"><label className="block text-xs font-medium text-white/60 uppercase">Reason</label><textarea rows={2} className="w-full bg-white/5 border border-white/10 rounded-xl text-sm text-white p-3 focus:outline-none focus:ring-2 focus:ring-orange-400/40 resize-none" placeholder="Reason..."/></div>
-          <div className="flex gap-2 pt-2"><Btn onClick={()=>setWalletModal(false)}>Confirm</Btn><Btn variant="ghost" onClick={()=>setWalletModal(false)}>Cancel</Btn></div>
+          <Sel label="Action" value={walletForm.action} onChange={(v)=>setWalletForm(f=>({...f,action:v}))} options={[{value:"add",label:"Add Balance"},{value:"deduct",label:"Deduct Balance"}]}/>
+          <Inp label="Amount (৳)" type="number" value={walletForm.amount} onChange={(v)=>setWalletForm(f=>({...f,amount:v}))} placeholder="0.00"/>
+          <div className="space-y-1.5"><label className="block text-xs font-medium text-white/60 uppercase">Reason</label><textarea rows={2} value={walletForm.reason} onChange={(e)=>setWalletForm(f=>({...f,reason:e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-xl text-sm text-white p-3 focus:outline-none focus:ring-2 focus:ring-orange-400/40 resize-none" placeholder="Reason..."/></div>
+          <div className="flex gap-2 pt-2"><Btn onClick={submitWalletBulk}>Confirm</Btn><Btn variant="ghost" onClick={()=>setWalletModal(false)}>Cancel</Btn></div>
         </div>
       </Modal>
 
       <Modal isOpen={rewardModal} onClose={()=>setRewardModal(false)} title="Manage Rewards" maxW="max-w-sm">
         <div className="space-y-4">
-          <Sel label="Action" value="add" onChange={()=>{}} options={[{value:"add",label:"Add Points"},{value:"remove",label:"Remove Points"}]}/>
-          <Inp label="Points" type="number" value="" onChange={()=>{}} placeholder="0"/>
-          <Inp label="Reason" value="" onChange={()=>{}} placeholder="Reason..."/>
-          <div className="flex gap-2 pt-2"><Btn onClick={()=>setRewardModal(false)}>Confirm</Btn><Btn variant="ghost" onClick={()=>setRewardModal(false)}>Cancel</Btn></div>
+          <Sel label="Action" value={rewardForm.action} onChange={(v)=>setRewardForm(f=>({...f,action:v}))} options={[{value:"add",label:"Add Points"},{value:"remove",label:"Remove Points"}]}/>
+          <Inp label="Points" type="number" value={rewardForm.points} onChange={(v)=>setRewardForm(f=>({...f,points:v}))} placeholder="0"/>
+          <Inp label="Reason" value={rewardForm.reason} onChange={(v)=>setRewardForm(f=>({...f,reason:v}))} placeholder="Reason..."/>
+          <div className="flex gap-2 pt-2"><Btn onClick={submitRewardsBulk}>Confirm</Btn><Btn variant="ghost" onClick={()=>setRewardModal(false)}>Cancel</Btn></div>
+        </div>
+      </Modal>
+
+      <Modal isOpen={landingModal} onClose={()=>setLandingModal(false)} title="Create Landing Request" maxW="max-w-md">
+        <div className="space-y-4">
+          <Sel
+            label="Customer"
+            value={landingForm.customerId}
+            onChange={(v)=>setLandingForm(f=>({...f,customerId:v}))}
+            options={[
+              { value:"", label:"Select customer" },
+              ...customers.map(c=>({ value:String(c._id), label:`${c.name} (${String(c.phone || '')})` })),
+            ]}
+          />
+          <Inp label="Title" value={landingForm.title} onChange={(v)=>setLandingForm(f=>({...f,title:v}))} placeholder="Landing title"/>
+          <Inp label="Products" type="number" value={landingForm.products} onChange={(v)=>setLandingForm(f=>({...f,products:v}))} placeholder="0"/>
+          <Sel
+            label="Template"
+            value={landingForm.template}
+            onChange={(v)=>setLandingForm(f=>({...f,template:v}))}
+            options={[
+              { value:"Grid", label:"Grid" },
+              { value:"Hero", label:"Hero" },
+              { value:"Minimal", label:"Minimal" },
+            ]}
+          />
+          <div className="flex gap-2 pt-2"><Btn onClick={submitLandingRequest}><I.Check c="w-4 h-4"/> Create</Btn><Btn variant="ghost" onClick={()=>setLandingModal(false)}>Cancel</Btn></div>
         </div>
       </Modal>
 

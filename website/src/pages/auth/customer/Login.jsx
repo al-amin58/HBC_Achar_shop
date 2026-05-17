@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {useNavigate} from 'react-router';
+import { useNavigate, useLocation } from 'react-router';
 import { EyeIcon, EyeOffIcon } from "../../../componets/Eye_Icon.jsx";
 import { toast } from 'react-toastify';
 import api from '../../../api/axios.js';
@@ -14,6 +14,7 @@ export default function Login() {
     password: ""
   })
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleChange = (e) => {
     setForm({
@@ -28,8 +29,10 @@ export default function Login() {
       const response = await api.post('/auth/login', form);
       //save token to localstorage
       localStorage.setItem('token', response.data.token);
+      window.dispatchEvent(new Event('hbc-auth-login'));
       toast.success(response.data.message || "Login successful!");
-      navigate('/');
+      const redirectTo = location.state?.from || '/';
+      navigate(redirectTo, { replace: true });
     } catch (error) {
       toast.error(error.response?.data?.message || error.message || "An error occurred during login.");
     }
@@ -62,8 +65,13 @@ export default function Login() {
           <div className="flex flex-col items-center mb-8">
            
             <p className="text-sm mt-1" style={{ color: "#f4a04b", fontWeight: 600, letterSpacing: "0.08em" }}>
-              Welcome back 
+              Welcome back
             </p>
+            {location.state?.reason === 'cart' && (
+              <p className="text-xs mt-2 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-center">
+                কার্টে পণ্য যোগ করতে লগইন করুন
+              </p>
+            )}
           </div>
 
           {/* Divider */}

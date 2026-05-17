@@ -5,7 +5,8 @@ const MainNavbar = ({
   isScrolled, 
   cartCount, 
   onCartOpen, 
-  onMobileMenuOpen 
+  onMobileMenuOpen,
+  logoUrl
 }) => {
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
 
@@ -27,7 +28,7 @@ const MainNavbar = ({
           {/* Logo */}
           <a href="/" className="flex items-center gap-3 shrink-0 group">
             <div className="w-30 h-11  flex items-center justify-center">
-              <img src="./logo.svg" alt="HBC Achar Logo" srcset="" />
+              <img src={logoUrl || "./logo.svg"} alt="HBC Achar Logo" srcSet="" />
             </div>
            
           </a>
