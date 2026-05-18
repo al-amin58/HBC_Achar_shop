@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 const Footer = () => {
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [subscribed, setSubscribed] = useState(false);
 
@@ -13,29 +15,45 @@ const Footer = () => {
     }
   };
 
+  const quickLinks = [
+    { key: 'footer.links.home', href: '/' },
+    { key: 'footer.links.shopAll', href: '/shop' },
+    { key: 'footer.links.categories', href: '/categories' },
+    { key: 'footer.links.flashSale', href: '/flash-sale' },
+    { key: 'footer.links.offers', href: '/offers' },
+    { key: 'footer.links.newArrivals', href: '/category/new' },
+  ];
+
+  const serviceLinks = [
+    { key: 'footer.links.myAccount', href: '/customer' },
+    { key: 'footer.links.myOrders', href: '/orders' },
+    { key: 'footer.links.trackOrder', href: '/track-order' },
+    { key: 'footer.links.returnPolicy', href: '/return-policy' },
+    { key: 'footer.links.terms', href: '/terms-and-conditions' },
+    { key: 'footer.links.privacy', href: '/privacy-policy' },
+  ];
+
   return (
     <footer className="bg-emerald-900 text-emerald-100 mt-auto">
-      
-      {/* 🔔 Newsletter Banner */}
       <div className="bg-linear-to-r from-orange-400 via-orange-300 to-orange-400 relative overflow-hidden">
         <div className="container mx-auto px-4 py-8 md:py-10">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="text-center md:text-left">
               <h3 className="text-xl md:text-2xl font-bold text-white mb-1 flex items-center justify-center md:justify-start gap-2">
-                <span>📩</span> Subscribe to Our Newsletter
+                <span>📩</span> {t('footer.newsletterTitle')}
               </h3>
               <p className="text-orange-50 text-sm md:text-base">
-                Get exclusive offers, new arrival alerts & achar recipes!
+                {t('footer.newsletterDesc')}
               </p>
             </div>
-            
+
             <form onSubmit={handleSubscribe} className="w-full md:w-auto flex gap-2 max-w-md">
               <div className="relative flex-1">
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter your email address"
+                  placeholder={t('footer.emailPlaceholder')}
                   className="w-full pl-4 pr-4 py-3 rounded-xl border-2 border-orange-200 focus:border-white focus:outline-none focus:ring-4 focus:ring-orange-200/50 text-emerald-900 placeholder:text-emerald-300 bg-white transition"
                   required
                 />
@@ -44,32 +62,25 @@ const Footer = () => {
                 type="submit"
                 className="px-6 py-3 bg-emerald-800 text-white font-bold rounded-xl hover:bg-emerald-900 transition shadow-lg whitespace-nowrap"
               >
-                {subscribed ? '✅ Subscribed!' : 'Subscribe'}
+                {subscribed ? t('footer.subscribed') : t('footer.subscribe')}
               </button>
             </form>
           </div>
         </div>
       </div>
 
-      
-
-      {/* 🦶 Main Footer Grid */}
       <div className="container mx-auto px-4 py-12">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-12">
-          
-          {/* Column 1: Brand Info */}
           <div className="space-y-4">
             <a href="/" className="inline-block">
               <img src="./logo.png" alt="HBC Achar" className="w-24 h-14 rounded-lg" />
             </a>
             <p className="text-emerald-300 text-sm leading-relaxed">
-              Authentic homemade pickles crafted with love. Bringing the taste of tradition to your doorstep since 2018.
+              {t('footer.brandDesc')}
             </p>
             <p className="text-orange-300 text-xs font-bold uppercase tracking-wider">
-              🏠 Homemade • 🧼 Hygienic • 💯 Natural
+              {t('footer.brandTags')}
             </p>
-            
-            {/* Social Links */}
             <div className="flex items-center gap-3 pt-2">
               {[
                 { icon: '📘', label: 'Facebook', href: '#' },
@@ -89,78 +100,61 @@ const Footer = () => {
             </div>
           </div>
 
-          {/* Column 2: Quick Links */}
           <div>
             <h4 className="text-white font-bold text-sm uppercase tracking-wider mb-4 flex items-center gap-2">
               <span className="w-1 h-4 bg-orange-400 rounded-full"></span>
-              Quick Links
+              {t('footer.quickLinks')}
             </h4>
             <ul className="space-y-2.5">
-              {[
-                { name: '🏠 Home', href: '/' },
-                { name: '🛍️ Shop All', href: '/shop' },
-                { name: '📂 Categories', href: '/categories' },
-                { name: '🔥 Flash Sale', href: '/flash-sale' },
-                { name: '🎁 Offers & Campaigns', href: '/offers' },
-                { name: '✨ New Arrivals', href: '/category/new' },
-              ].map((link, idx) => (
+              {quickLinks.map((link, idx) => (
                 <li key={idx}>
-                  <a 
+                  <a
                     href={link.href}
                     className="text-emerald-300 hover:text-orange-300 text-sm transition flex items-center gap-2 group"
                   >
-                    <span className="group-hover:translate-x-1 transition-transform">{link.name}</span>
+                    <span className="group-hover:translate-x-1 transition-transform">{t(link.key)}</span>
                   </a>
                 </li>
               ))}
             </ul>
           </div>
 
-          {/* Column 3: Customer Service */}
           <div>
             <h4 className="text-white font-bold text-sm uppercase tracking-wider mb-4 flex items-center gap-2">
               <span className="w-1 h-4 bg-orange-400 rounded-full"></span>
-              Customer Service
+              {t('footer.customerService')}
             </h4>
             <ul className="space-y-2.5">
-              {[
-                { name: '👤 My Account', href: '/customer' },
-                { name: '📦 My Orders', href: '/orders' },
-                { name: '🚚 Track Order', href: '/track-order' },
-                { name: '↩️ Return Policy', href: '/return-policy' },
-                { name: '📝 Terms & Conditions', href: '/terms-and-conditions' },
-                { name: '🔒 Privacy Policy', href: '/privacy-policy' }
-              ].map((link, idx) => (
+              {serviceLinks.map((link, idx) => (
                 <li key={idx}>
-                  <a 
+                  <a
                     href={link.href}
                     className="text-emerald-300 hover:text-orange-300 text-sm transition flex items-center gap-2 group"
                   >
-                    <span className="group-hover:translate-x-1 transition-transform">{link.name}</span>
+                    <span className="group-hover:translate-x-1 transition-transform">{t(link.key)}</span>
                   </a>
                 </li>
               ))}
             </ul>
           </div>
 
-          {/* Column 4: Contact Info */}
           <div>
             <h4 className="text-white font-bold text-sm uppercase tracking-wider mb-4 flex items-center gap-2">
               <span className="w-1 h-4 bg-orange-400 rounded-full"></span>
-              Contact Us
+              {t('footer.contactUs')}
             </h4>
             <ul className="space-y-4">
               <li className="flex items-start gap-3">
                 <span className="text-orange-400 text-lg mt-0.5">📍</span>
                 <div>
-                  <p className="text-sm text-white font-medium">Address</p>
+                  <p className="text-sm text-white font-medium">{t('footer.address')}</p>
                   <p className="text-sm text-emerald-300">House 12, Road 5, Dhanmondi, Dhaka-1205</p>
                 </div>
               </li>
               <li className="flex items-start gap-3">
                 <span className="text-orange-400 text-lg mt-0.5">📞</span>
                 <div>
-                  <p className="text-sm text-white font-medium">Phone</p>
+                  <p className="text-sm text-white font-medium">{t('footer.phone')}</p>
                   <a href="tel:01712345678" className="text-sm text-emerald-300 hover:text-orange-300 transition">
                     01712-345678
                   </a>
@@ -169,33 +163,29 @@ const Footer = () => {
               <li className="flex items-start gap-3">
                 <span className="text-orange-400 text-lg mt-0.5">📧</span>
                 <div>
-                  <p className="text-sm text-white font-medium">Email</p>
+                  <p className="text-sm text-white font-medium">{t('footer.email')}</p>
                   <a href="mailto:support@hbcachar.com" className="text-sm text-emerald-300 hover:text-orange-300 transition">
                     support@hbcachar.com
                   </a>
                 </div>
               </li>
-              
             </ul>
           </div>
         </div>
       </div>
- 
 
-      {/* 📌 Copyright Bar */}
       <div className="border-t border-emerald-800 bg-emerald-950">
         <div className="container mx-auto px-4 py-4">
           <div className="flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-emerald-400">
             <p className="text-center md:text-left">
-              © {new Date().getFullYear()} <span className="text-orange-400 font-bold">HBC Achar</span>. All rights reserved.
+              {t('footer.copyright', { year: new Date().getFullYear() })}
             </p>
-            
             <div className="flex items-center gap-4">
-              <a href="/privacy-policy" className="hover:text-orange-300 transition">Privacy Policy</a>
+              <a href="/privacy-policy" className="hover:text-orange-300 transition">{t('footer.privacyPolicy')}</a>
               <span className="text-emerald-700">|</span>
-              <a href="/terms" className="hover:text-orange-300 transition">Terms & Conditions</a>
+              <a href="/terms" className="hover:text-orange-300 transition">{t('footer.terms')}</a>
               <span className="text-emerald-700">|</span>
-              <a href="/refund-policy" className="hover:text-orange-300 transition">Refund Policy</a>
+              <a href="/refund-policy" className="hover:text-orange-300 transition">{t('footer.refundPolicy')}</a>
             </div>
           </div>
         </div>

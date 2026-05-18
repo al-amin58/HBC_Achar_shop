@@ -12,6 +12,7 @@ const ADMIN_ROUTE_PREFIXES = [
     '/products',
     '/customers',
     '/settings',
+    '/coupons',
     '/auth/admin',
 ];
 

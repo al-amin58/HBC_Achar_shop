@@ -3,6 +3,7 @@ import Order from '../../models/Order.js';
 import bcrypt from 'bcryptjs';
 import validator from 'validator';
 import jwt from 'jsonwebtoken';
+import { recordLoginDevice } from '../../utils/recordLoginDevice.js';
 
 // Signup user
 export const signupUser = async (req, res) => {
@@ -80,7 +81,8 @@ export const loginUser = async (req, res) => {
             return res.status(400).json({ message: 'Enter your correct password.' });
         }
 
-        // Create JWT token
+        await recordLoginDevice(user, req);
+
         const token = jwt.sign(
             { id: user._id },
              process.env.JWT_SECRET, 
@@ -92,7 +94,8 @@ export const loginUser = async (req, res) => {
             user: {
                 id: user._id,
                 name: user.name,
-                phonenumber: user.phonenumber
+                phonenumber: user.phonenumber,
+                image: user.image || '',
             }, 
             message: 'Login successful' 
             
@@ -107,6 +110,7 @@ export const loginUser = async (req, res) => {
 export const getMe = async (req, res) => {
   try {
     const user = req.user;
+    await recordLoginDevice(user, req);
     const totalOrders = await Order.countDocuments({ user: user._id });
     const recentOrders = await Order.find({ user: user._id })
       .sort({ createdAt: -1 })
@@ -120,10 +124,16 @@ export const getMe = async (req, res) => {
         name: user.name,
         phonenumber: user.phonenumber,
         email: user.email || '',
+        image: user.image || '',
         location: user.location || 'Dhaka',
+        shippingAddress: user.shippingAddress || { address: '', division: '', district: '', thana: '' },
         totalOrders: user.totalOrders ?? totalOrders,
         totalSpend: user.totalSpend ?? 0,
+        walletBalance: user.walletBalance ?? 0,
+        rewardPoints: user.rewardPoints ?? 0,
+        landingPages: user.landingPages ?? 0,
       },
+      notificationSettings: user.notificationSettings || { order: true, wallet: true, flash: false, landing: true },
       stats: { totalOrders },
       recentOrders: recentOrders.map((o) => ({
         id: String(o._id),
@@ -144,6 +154,81 @@ export const getMe = async (req, res) => {
 
 export const logoutUser = (req, res) => {
     res.json({ message: 'Logged out successfully' });
+};
+
+/** PUT /api/auth/profile — update user profile including shipping address */
+export const updateProfile = async (req, res) => {
+  try {
+    const user = req.user;
+    const { name, email, image, shippingAddress } = req.body;
+
+    const updateData = {};
+    if (name) updateData.name = name;
+    if (email !== undefined) updateData.email = email;
+    if (image !== undefined) {
+      if (image && String(image).length > 2_000_000) {
+        return res.status(400).json({ message: 'Image too large (max ~2MB)' });
+      }
+      updateData.image = image || '';
+    }
+    if (shippingAddress) {
+      updateData.shippingAddress = {
+        address: shippingAddress.address || '',
+        division: shippingAddress.division || '',
+        district: shippingAddress.district || '',
+        thana: shippingAddress.thana || '',
+      };
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      user._id,
+      { $set: updateData },
+      { new: true }
+    ).select('-password');
+
+    return res.json({
+      message: 'Profile updated successfully',
+      user: {
+        id: String(updatedUser._id),
+        name: updatedUser.name,
+        phonenumber: updatedUser.phonenumber,
+        email: updatedUser.email || '',
+        image: updatedUser.image || '',
+        location: updatedUser.location || 'Dhaka',
+        shippingAddress: updatedUser.shippingAddress || { address: '', division: '', district: '', thana: '' },
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ message: 'Failed to update profile', error: error.message });
+  }
+};
+
+/** PUT /api/auth/change-password */
+export const changePassword = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const { oldPassword, newPassword } = req.body;
+    if (!oldPassword || !newPassword) {
+      return res.status(400).json({ message: 'বর্তমান ও নতুন পাসওয়ার্ড প্রয়োজন' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে' });
+    }
+
+    const isMatch = await bcrypt.compare(oldPassword, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'বর্তমান পাসওয়ার্ড ভুল' });
+    }
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    await user.save();
+
+    return res.json({ message: 'পাসওয়ার্ড পরিবর্তন হয়েছে' });
+  } catch (error) {
+    return res.status(500).json({ message: 'Failed to change password', error: error.message });
+  }
 };
 
 // forget password, reset password, etc. can be added here in the future

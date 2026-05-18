@@ -1,9 +1,17 @@
 // CheckoutPage.jsx
-import  { useState, useMemo } from 'react';
-import { useNavigate, useLocation  } from 'react-router';
+import  { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useNavigate, useLocation, useSearchParams } from 'react-router';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
 import api from '../../api/axios';
 import { useCart } from '../../componets/useCart.jsx';
+import {
+  getDivisions,
+  getDistrictsByDivision,
+  getUpazilasByDistrict,
+  toSelectOptions,
+  resolveLocationNames,
+} from '../../utils/bdGeo.js';
 import { 
   ChevronRight, 
   ChevronLeft, 
@@ -23,64 +31,118 @@ import {
   Sparkles,
   RotateCcw,
   ArrowLeft,
-  
-
+  CreditCard,
+  Shield,
 } from 'lucide-react';
 
+const PAYMENT_METHOD_CONFIG = {
+  cod: {
+    labelKey: 'checkout.payment.cod.label',
+    descriptionKey: 'checkout.payment.cod.description',
+    icon: Banknote,
+    border: 'border-orange-400',
+    bg: 'bg-orange-50',
+    iconActive: 'bg-orange-500 text-white',
+    check: 'text-orange-500',
+    hover: 'hover:border-orange-200',
+  },
+  wallet: {
+    labelKey: 'checkout.payment.wallet.label',
+    descriptionKey: null,
+    icon: Wallet,
+    border: 'border-emerald-400',
+    bg: 'bg-emerald-50',
+    iconActive: 'bg-emerald-500 text-white',
+    check: 'text-emerald-500',
+    hover: 'hover:border-emerald-200',
+  },
+  bkash: {
+    labelKey: 'checkout.payment.bkash.label',
+    descriptionKey: 'checkout.payment.bkash.description',
+    icon: Smartphone,
+    border: 'border-pink-400',
+    bg: 'bg-pink-50',
+    iconActive: 'bg-pink-500 text-white',
+    check: 'text-pink-500',
+    hover: 'hover:border-pink-200',
+    detailBg: 'bg-pink-50',
+    detailBorder: 'border-pink-200',
+    detailText: 'text-pink-800',
+    merchantLabel: 'বিকাশ',
+  },
+  nagad: {
+    labelKey: 'checkout.payment.nagad.label',
+    descriptionKey: 'checkout.payment.nagad.description',
+    icon: Smartphone,
+    border: 'border-orange-400',
+    bg: 'bg-orange-50',
+    iconActive: 'bg-orange-500 text-white',
+    check: 'text-orange-500',
+    hover: 'hover:border-orange-200',
+    detailBg: 'bg-orange-50',
+    detailBorder: 'border-orange-200',
+    detailText: 'text-orange-800',
+    merchantLabel: 'নগদ',
+  },
+  rocket: {
+    labelKey: 'checkout.payment.rocket.label',
+    descriptionKey: 'checkout.payment.rocket.description',
+    icon: Smartphone,
+    border: 'border-indigo-400',
+    bg: 'bg-indigo-50',
+    iconActive: 'bg-indigo-500 text-white',
+    check: 'text-indigo-500',
+    hover: 'hover:border-indigo-200',
+    detailBg: 'bg-indigo-50',
+    detailBorder: 'border-indigo-200',
+    detailText: 'text-indigo-800',
+    merchantLabel: 'রকেট',
+  },
+  sslcommerz: {
+    labelKey: 'checkout.payment.sslcommerz.label',
+    descriptionKey: 'checkout.payment.sslcommerz.description',
+    icon: Shield,
+    border: 'border-purple-400',
+    bg: 'bg-purple-50',
+    iconActive: 'bg-purple-500 text-white',
+    check: 'text-purple-500',
+    hover: 'hover:border-purple-200',
+    detailBg: 'bg-purple-50',
+    detailBorder: 'border-purple-200',
+    detailText: 'text-purple-800',
+  },
+  stripe: {
+    labelKey: 'checkout.payment.stripe.label',
+    descriptionKey: 'checkout.payment.stripe.description',
+    icon: CreditCard,
+    border: 'border-blue-400',
+    bg: 'bg-blue-50',
+    iconActive: 'bg-blue-500 text-white',
+    check: 'text-blue-500',
+    hover: 'hover:border-blue-200',
+    detailBg: 'bg-blue-50',
+    detailBorder: 'border-blue-200',
+    detailText: 'text-blue-800',
+  },
+  paypal: {
+    labelKey: 'checkout.payment.paypal.label',
+    descriptionKey: 'checkout.payment.paypal.description',
+    icon: CreditCard,
+    border: 'border-blue-500',
+    bg: 'bg-blue-50',
+    iconActive: 'bg-blue-600 text-white',
+    check: 'text-blue-600',
+    hover: 'hover:border-blue-300',
+    detailBg: 'bg-blue-50',
+    detailBorder: 'border-blue-200',
+    detailText: 'text-blue-800',
+  },
+};
+
+const MOBILE_WALLET_METHODS = new Set(['bkash', 'nagad', 'rocket']);
+const ONLINE_GATEWAY_METHODS = new Set(['sslcommerz', 'stripe', 'paypal']);
+
 // Demo data removed — using real cart from useCart hook
-
-const coupons = {
-  'ACHAR10': { type: 'percentage', value: 10, maxDiscount: 100 },
-  'WELCOME50': { type: 'fixed', value: 50 },
-  'FLASH25': { type: 'percentage', value: 25, maxDiscount: 200 }
-};
-
-
-
-// ─── Division → District → Thana Data ───────────────────────
-const locationData = {
-  'Dhaka': {
-    'Dhaka North': ['Banani', 'Gulshan', 'Mirpur', 'Uttara', 'Badda'],
-    'Dhaka South': ['Dhanmondi', 'Mohammadpur', 'Lalbagh', 'Sutrapur', 'Motijheel'],
-    'Narayanganj': ['Siddhirganj', 'Bandar', 'Fatullah'],
-    'Gazipur': ['Tongi', 'Kaliakair', 'Sreepur']
-  },
-  'Chittagong': {
-    'Chittagong': ['Pahartali', 'Double Mooring', 'Halishahar', 'Kotwali', 'Panchlaish'],
-    'Cox\'s Bazar': ['Teknaf', 'Ukhia', 'Ramu'],
-    'Comilla': ['Debidwar', 'Daudkandi', 'Muradnagar']
-  },
-  'Khulna': {
-    'Khulna': ['Sonadanga', 'Khalishpur', 'Daulatpur'],
-    'Jessore': ['Bagherpara', 'Chaugachha', 'Jhikargachha'],
-    'Satkhira': ['Tala', 'Kaliganj', 'Assasuni']
-  },
-  'Rajshahi': {
-    'Rajshahi': ['Boalia', 'Motihar', 'Shahmakhdum'],
-    'Bogura': ['Sherpur', 'Shibganj', 'Gabtali'],
-    'Pabna': ['Ishwardi', 'Bera', 'Sujanagar']
-  },
-  'Sylhet': {
-    'Sylhet': ['Zindabazar', 'Beanibazar', 'Golapganj'],
-    'Moulvibazar': ['Kulaura', 'Sreemangal', 'Juri'],
-    'Habiganj': ['Chunarughat', 'Madhabpur', 'Bahubal']
-  },
-  'Barishal': {
-    'Barishal': ['Kotwali', 'Hizla', 'Mehendiganj'],
-    'Patuakhali': ['Galachipa', 'Dashmina', 'Rangabali'],
-    'Bhola': ['Burhanuddin', 'Tazumuddin', 'Lalmohan']
-  },
-  'Rangpur': {
-    'Rangpur': ['Kotwali', 'Badarganj', 'Pirganj'],
-    'Dinajpur': ['Birampur', 'Phulbari', 'Parbatipur'],
-    'Kurigram': ['Rajarhat', 'Ulipur', 'Chilmari']
-  },
-  'Mymensingh': {
-    'Mymensingh': ['Kotwali', 'Trishal', 'Muktagachha'],
-    'Jamalpur': ['Melandaha', 'Sarishabari', 'Islampur'],
-    'Netrokona': ['Kendua', 'Atpara', 'Barhatta']
-  }
-};
 
 // WalletModal Component (Replace in CheckoutPage.jsx)
 const WalletModal = ({ isOpen, onClose, balance }) => {
@@ -116,7 +178,7 @@ const WalletModal = ({ isOpen, onClose, balance }) => {
       <div className="relative bg-gray-900 rounded-3xl max-w-md w-full max-h-[90vh] overflow-y-auto animate-scale-in">
 
         {/* Header */}
-        <div className="sticky top-0 bg-gray-900 z-10 p-4 border-b border-gray-800 flex items-center justify-between">
+        {/* <div className="sticky top-0 bg-gray-900 z-10 p-4 border-b border-gray-800 flex items-center justify-between">
           <h3 className="text-white font-bold text-lg">My Wallet</h3>
           <button 
             onClick={onClose}
@@ -124,7 +186,7 @@ const WalletModal = ({ isOpen, onClose, balance }) => {
           >
             <X className="w-4 h-4" />
           </button>
-        </div>
+        </div> */}
 
         {/* Balance Card */}
         <div className="bg-linear-to-br from-emerald-700 via-teal-700 to-emerald-800 p-8 text-center mx-4 mt-4 rounded-2xl">
@@ -208,6 +270,7 @@ const WalletModal = ({ isOpen, onClose, balance }) => {
 
 // ─── Coin Modal Component ───────────────────────────────────
 const CoinModal = ({ isOpen, onClose, userCoins, onApplyCoins, maxUsableCoins }) => {
+  const { t } = useTranslation();
   const [coinAmount, setCoinAmount] = useState(0);
   const [coinError, setCoinError] = useState('');
 
@@ -468,9 +531,13 @@ const SelectField = ({ label, required, options, value, onChange, placeholder, d
       {...props}
     >
       <option value="">{placeholder}</option>
-      {options.map(opt => (
-        <option key={opt} value={opt}>{opt}</option>
-      ))}
+      {options.map((opt) => {
+        const optValue = typeof opt === 'object' ? opt.value : opt;
+        const optLabel = typeof opt === 'object' ? opt.label : opt;
+        return (
+          <option key={optValue} value={optValue}>{optLabel}</option>
+        );
+      })}
     </select>
     {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
   </div>
@@ -480,9 +547,11 @@ const SelectField = ({ label, required, options, value, onChange, placeholder, d
 
 // ─── Main Component ─────────────────────────────────────────
 export default function CheckoutPage() {
+  const { t } = useTranslation();
   const [step, setStep] = useState(1); // 1 = Customer Info, 2 = Payment
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { cart, monthlySubscription, clearCart, fetchCart } = useCart();
   const [placingOrder, setPlacingOrder] = useState(false);
 
@@ -530,10 +599,16 @@ export default function CheckoutPage() {
 
   const [formErrors, setFormErrors] = useState({});
 
-  const [paymentMethod, setPaymentMethod] = useState('cod');
+  const [paymentMethod, setPaymentMethod] = useState('');
+  const [enabledPaymentMethods, setEnabledPaymentMethods] = useState([]);
+  const [paymentSettingsLoading, setPaymentSettingsLoading] = useState(true);
+  const [supportPhone, setSupportPhone] = useState('');
   const [couponCode, setCouponCode] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [couponError, setCouponError] = useState('');
+  const [applyingCoupon, setApplyingCoupon] = useState(false);
+  const [activeCoupons, setActiveCoupons] = useState([]);
+  const couponFromUrlApplied = useRef(false);
   const [orderNote, setOrderNote] = useState('');
   const [useWallet, setUseWallet] = useState(false);
   const [showWalletModal, setShowWalletModal] = useState(false);
@@ -546,9 +621,84 @@ export default function CheckoutPage() {
   // Demo wallet balance
   const walletBalance = 500;
 
+  useEffect(() => {
+    const fetchPaymentSettings = async () => {
+      try {
+        const res = await api.get('/settings/public');
+        const data = res?.data && typeof res.data === 'object' ? res.data : {};
+        const methods = Array.isArray(data.paymentMethods) ? data.paymentMethods : [];
+        setEnabledPaymentMethods(methods);
+        setSupportPhone(String(data.supportPhone || ''));
+        if (methods.length > 0) {
+          const nextId = methods.some((m) => m.id === paymentMethod) ? paymentMethod : methods[0].id;
+          setPaymentMethod(nextId);
+          setUseWallet(nextId === 'wallet');
+        }
+      } catch {
+        setEnabledPaymentMethods([]);
+      } finally {
+        setPaymentSettingsLoading(false);
+      }
+    };
+    fetchPaymentSettings();
+  }, []);
+
   // Calculations — using real checkoutItems
   const subtotal = checkoutItems.reduce((sum, item) => sum + (item.price * item.qty), 0);
   const deliveryCharge = 85;
+
+  useEffect(() => {
+    const fetchActiveCoupons = async () => {
+      try {
+        const res = await api.get('/coupons/active');
+        setActiveCoupons(Array.isArray(res.data) ? res.data : []);
+      } catch {
+        setActiveCoupons([]);
+      }
+    };
+    fetchActiveCoupons();
+  }, []);
+
+  const validateAndApplyCoupon = useCallback(async (rawCode) => {
+    const code = String(rawCode || '').trim().toUpperCase();
+    if (!code) {
+      setCouponError('কুপন কোড লিখুন');
+      return false;
+    }
+    setApplyingCoupon(true);
+    setCouponError('');
+    try {
+      const res = await api.post('/coupons/validate', { code, subtotal });
+      const data = res?.data;
+      if (data?.valid && data?.coupon) {
+        setAppliedCoupon({ ...data.coupon, code: data.coupon.code });
+        setCouponCode('');
+        setCouponError('');
+        return true;
+      }
+      setAppliedCoupon(null);
+      setCouponError('অবৈধ বা মেয়াদোত্তীর্ণ কুপন কোড');
+      return false;
+    } catch (err) {
+      setAppliedCoupon(null);
+      const msg = err?.response?.data?.message;
+      setCouponError(msg || 'অবৈধ বা মেয়াদোত্তীর্ণ কুপন কোড');
+      return false;
+    } finally {
+      setApplyingCoupon(false);
+    }
+  }, [subtotal]);
+
+  useEffect(() => {
+    const fromUrl = searchParams.get('coupon');
+    if (!fromUrl || couponFromUrlApplied.current || appliedCoupon) return;
+    if (checkoutItems.length === 0) return;
+    couponFromUrlApplied.current = true;
+    validateAndApplyCoupon(fromUrl);
+    const next = new URLSearchParams(searchParams);
+    next.delete('coupon');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, checkoutItems.length, appliedCoupon, validateAndApplyCoupon, setSearchParams]);
 
   const calculateDiscount = () => {
     if (!appliedCoupon) return 0;
@@ -628,20 +778,34 @@ export default function CheckoutPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const applyCoupon = () => {
-    const code = couponCode.trim().toUpperCase();
+  const selectPaymentMethod = (id) => {
+    setPaymentMethod(id);
+    setUseWallet(id === 'wallet');
+  };
+
+  const applyCoupon = async () => {
+    let code = couponCode.trim().toUpperCase();
     if (!code) {
-      setCouponError('কুপন কোড লিখুন');
-      return;
-    }
-    if (coupons[code]) {
-      setAppliedCoupon({ code, ...coupons[code] });
+      setApplyingCoupon(true);
       setCouponError('');
-      setCouponCode('');
-    } else {
-      setAppliedCoupon(null);
-      setCouponError('অবৈধ বা মেয়াদোত্তীর্ণ কুপন কোড');
+      try {
+        const res = await api.get('/coupons/active');
+        const list = Array.isArray(res.data) ? res.data : [];
+        const featured = list[0];
+        if (!featured?.code) {
+          setCouponError('এখন কোনো কুপন উপলব্ধ নেই');
+          return;
+        }
+        code = featured.code;
+        setCouponCode(featured.code);
+      } catch {
+        setCouponError('কুপন লোড করা যায়নি');
+        return;
+      } finally {
+        setApplyingCoupon(false);
+      }
     }
+    await validateAndApplyCoupon(code);
   };
 
   const removeCoupon = () => {
@@ -662,6 +826,10 @@ export default function CheckoutPage() {
       toast.error('কার্ট খালি');
       return;
     }
+    if (!paymentMethod || !enabledPaymentMethods.some((m) => m.id === paymentMethod)) {
+      toast.error('পেমেন্ট পদ্ধতি নির্বাচন করুন');
+      return;
+    }
     setPlacingOrder(true);
     try {
       const isBuyNow = Boolean(location.state?.buyNow);
@@ -678,7 +846,10 @@ export default function CheckoutPage() {
               isFlashSale: location.state.product.isFlashSale,
             }))
           : undefined,
-        customer: formData,
+        customer: {
+          ...formData,
+          ...resolveLocationNames(formData),
+        },
         paymentMethod,
         orderNote,
         couponCode: appliedCoupon?.code || '',
@@ -691,22 +862,26 @@ export default function CheckoutPage() {
       const res = await api.post('/orders', payload);
       if (!isBuyNow) await clearCart();
       else await fetchCart();
-      toast.success('অর্ডার সফলভাবে সম্পন্ন হয়েছে!');
+      toast.success(t('checkout.orderSuccess'));
       navigate(`/invoice?id=${res.data.id}`, { replace: true });
     } catch (err) {
-      toast.error(err.response?.data?.message || 'অর্ডার সম্পন্ন করা যায়নি');
+      toast.error(err.response?.data?.message || t('checkout.orderFailed'));
     } finally {
       setPlacingOrder(false);
     }
   };
 
-  // Get districts based on division
-  const availableDistricts = formData.division ? Object.keys(locationData[formData.division] || {}) : [];
+  const divisionOptions = useMemo(() => toSelectOptions(getDivisions()), []);
 
-  // Get thanas based on district
-  const availableThanas = formData.district && formData.division 
-    ? locationData[formData.division][formData.district] || [] 
-    : [];
+  const districtOptions = useMemo(
+    () => (formData.division ? toSelectOptions(getDistrictsByDivision(formData.division)) : []),
+    [formData.division]
+  );
+
+  const upazilaOptions = useMemo(
+    () => (formData.district ? toSelectOptions(getUpazilasByDistrict(formData.district)) : []),
+    [formData.district]
+  );
 
   return (
     <div className="min-h-screen ">
@@ -719,7 +894,7 @@ export default function CheckoutPage() {
                 
               </div>
               <div>
-                <h1 className="text-xl font-bold text-gray-800">চেকআউট</h1>
+                <h1 className="text-xl font-bold text-gray-800">{t('checkout.title')}</h1>
               </div>
             </div>
 
@@ -729,28 +904,28 @@ export default function CheckoutPage() {
                 step === 1 ? 'bg-orange-500 text-white' : 'bg-green-100 text-green-700'
               }`}>
                 <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-xs font-bold">1</span>
-                <span className="hidden sm:inline">তথ্য</span>
+                <span className="hidden sm:inline">{t('checkout.stepInfo')}</span>
               </div>
               <ChevronRight className="w-4 h-4 text-gray-400" />
               <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${
                 step === 2 ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-400'
               }`}>
                 <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-xs font-bold">2</span>
-                <span className="hidden sm:inline">পেমেন্ট</span>
+                <span className="hidden sm:inline">{t('checkout.stepPayment')}</span>
               </div>
             </div>
 
             
 
             {/* My Wallet Button */}
-            <button
+            {/* <button
               onClick={() => setShowWalletModal(true)}
               className="flex items-center gap-2 px-4 py-2 bg-linear-to-r from-emerald-500 to-teal-500 text-white rounded-xl text-sm font-medium hover:shadow-lg transition-all"
             >
               <Wallet className="w-4 h-4" />
               <span className="hidden sm:inline">My Wallet</span>
               <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs">৳{walletBalance}</span>
-            </button>
+            </button> */}
           </div>
         </div>
       </div>
@@ -761,7 +936,7 @@ export default function CheckoutPage() {
           className="px-6 py-2.5 mb-5 flex  bg-linear-to-r from-orange-400 to-orange-500 text-white font-semibold rounded-lg hover:from-orange-500 hover:to-orange-600 transition-all shadow-md"
         >
           <ArrowLeft/>
-           Back to Cart
+           {t('checkout.backToCart')}
         </button>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
@@ -777,21 +952,21 @@ export default function CheckoutPage() {
                  
                   <div className="flex items-center gap-2 mb-6">
                     <div className="w-8 h-8 rounded-lg bg-linear-to-br from-orange-400 to-orange-500 text-white flex items-center justify-center text-sm font-bold">1</div>
-                    <h2 className="text-lg font-bold text-gray-800">গ্রাহকের তথ্য</h2>
+                    <h2 className="text-lg font-bold text-gray-800">{t('checkout.customerInfo')}</h2>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <InputField
-                      label="পূর্ণ নাম"
+                      label={t('checkout.fullName')}
                       required
                       name="fullName"
                       value={formData.fullName}
                       onChange={handleInputChange}
-                      placeholder="আপনার পূর্ণ নাম লিখুন"
+                      placeholder={t('checkout.fullNamePlaceholder')}
                       error={formErrors.fullName}
                     />
                     <InputField
-                      label="মোবাইল নম্বর"
+                      label={t('checkout.phone')}
                       required
                       name="phone"
                       value={formData.phone}
@@ -801,7 +976,7 @@ export default function CheckoutPage() {
                       error={formErrors.phone}
                     />
                     <InputField
-                      label="ইমেইল (ঐচ্ছিক)"
+                      label={t('checkout.emailOptional')}
                       name="email"
                       value={formData.email}
                       onChange={handleInputChange}
@@ -811,38 +986,38 @@ export default function CheckoutPage() {
 
                     {/* Division Select */}
                     <SelectField
-                      label="বিভাগ"
+                      label={t('checkout.division')}
                       required
                       name="division"
                       value={formData.division}
                       onChange={handleInputChange}
-                      options={Object.keys(locationData)}
-                      placeholder="বিভাগ নির্বাচন করুন"
+                      options={divisionOptions}
+                      placeholder={t('checkout.selectDivision')}
                       error={formErrors.division}
                     />
 
                     {/* District Select */}
                     <SelectField
-                      label="জেলা"
+                      label={t('checkout.district')}
                       required
                       name="district"
                       value={formData.district}
                       onChange={handleInputChange}
-                      options={availableDistricts}
-                      placeholder="জেলা নির্বাচন করুন"
+                      options={districtOptions}
+                      placeholder={t('checkout.selectDistrict')}
                       disabled={!formData.division}
                       error={formErrors.district}
                     />
 
                     {/* Thana Select */}
                     <SelectField
-                      label="থানা / উপজেলা"
+                      label={t('checkout.thana')}
                       required
                       name="thana"
                       value={formData.thana}
                       onChange={handleInputChange}
-                      options={availableThanas}
-                      placeholder="থানা নির্বাচন করুন"
+                      options={upazilaOptions}
+                      placeholder={t('checkout.selectThana')}
                       disabled={!formData.district}
                       error={formErrors.thana}
                     />
@@ -850,12 +1025,12 @@ export default function CheckoutPage() {
                     {/* Address Input */}
                     <div className="md:col-span-2">
                       <InputField
-                        label="সম্পূর্ণ ঠিকানা"
+                        label={t('checkout.address')}
                         required
                         name="address"
                         value={formData.address}
                         onChange={handleInputChange}
-                        placeholder="বাড়ি / রোড / এলাকা নম্বর"
+                        placeholder={t('checkout.addressPlaceholder')}
                         error={formErrors.address}
                       />
                     </div>
@@ -870,7 +1045,7 @@ export default function CheckoutPage() {
                       onChange={handleInputChange}
                       className="w-4 h-4 text-orange-500 rounded border-orange-300 focus:ring-orange-400"
                     />
-                    <label htmlFor="saveInfo" className="text-sm text-gray-600">এই তথ্য সংরক্ষণ করুন (পরবর্তী অর্ডারের জন্য)</label>
+                    <label htmlFor="saveInfo" className="text-sm text-gray-600">{t('checkout.saveInfo')}</label>
                   </div>
                 </div>
 
@@ -879,15 +1054,15 @@ export default function CheckoutPage() {
                 <div className="bg-white/90 backdrop-blur rounded-2xl shadow-sm border border-orange-100 p-6">
                   <div className="flex items-center gap-2 mb-6">
                     <div className="w-8 h-8 rounded-lg bg-linear-to-br from-orange-400 to-orange-500 text-white flex items-center justify-center text-sm font-bold">2</div>
-                    <h2 className="text-lg font-bold text-gray-800">শিপিং চার্জ</h2>
+                    <h2 className="text-lg font-bold text-gray-800">{t('checkout.shippingCharge')}</h2>
                   </div>
 
                   <div className="relative p-4 rounded-xl border-2 border-green-400 bg-green-50 shadow-sm">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="font-semibold text-gray-800">সারাদেশ ডেলিভারি চার্জ</span>
+                      <span className="font-semibold text-gray-800">{t('checkout.nationwideDelivery')}</span>
                       <span className="text-lg font-bold text-green-600">৳85</span>
                     </div>
-                    <p className="text-sm text-gray-500">ডেলিভারি সময়: ৩৩ থেকে ৭২ ঘন্টা</p>
+                    <p className="text-sm text-gray-500">{t('checkout.deliveryTime')}</p>
 
 
                   </div>
@@ -897,7 +1072,7 @@ export default function CheckoutPage() {
                 <div className="bg-white/90 backdrop-blur rounded-2xl shadow-sm border border-orange-100 p-6">
                   <div className="flex items-center gap-2 mb-6">
                     <div className="w-8 h-8 rounded-lg bg-linear-to-br from-orange-400 to-orange-500 text-white flex items-center justify-center text-sm font-bold">3</div>
-                    <h2 className="text-lg font-bold text-gray-800">কুপন</h2>
+                    <h2 className="text-lg font-bold text-gray-800">{t('checkout.coupon')}</h2>
                   </div>
 
                   <div className="flex gap-3">
@@ -905,14 +1080,16 @@ export default function CheckoutPage() {
                       type="text"
                       value={couponCode}
                       onChange={(e) => setCouponCode(e.target.value)}
-                      placeholder="কুপন কোড লিখুন (যেমন: ACHAR10)"
+                      placeholder={t('checkout.couponPlaceholder')}
                       className="flex-1 px-4 py-2.5 border border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-300 focus:border-orange-400 outline-none uppercase"
                     />
                     <button
+                      type="button"
                       onClick={applyCoupon}
-                      className="px-6 py-2.5 bg-linear-to-r from-orange-400 to-orange-500 text-white font-semibold rounded-lg hover:from-orange-500 hover:to-orange-600 transition-all shadow-md"
+                      disabled={applyingCoupon}
+                      className="px-6 py-2.5 bg-linear-to-r from-orange-400 to-orange-500 text-white font-semibold rounded-lg hover:from-orange-500 hover:to-orange-600 transition-all shadow-md disabled:opacity-60"
                     >
-                      অ্যাপ্লাই
+                      {applyingCoupon ? '...' : 'কুপন নিন'}
                     </button>
                   </div>
 
@@ -942,22 +1119,25 @@ export default function CheckoutPage() {
                     </div>
                   )}
 
-                  <div className="mt-3 flex gap-2 flex-wrap">
-                    <span className="text-xs text-gray-400">ট্রাই করুন:</span>
-                    {Object.keys(coupons).map(code => (
-                      <button
-                        key={code}
-                        onClick={() => { setCouponCode(code); }}
-                        className="text-xs px-2 py-1 bg-orange-50 text-orange-600 rounded border border-orange-200 hover:bg-orange-100 transition-colors"
-                      >
-                        {code}
-                      </button>
-                    ))}
-                  </div>
+                  {/* {activeCoupons.length > 0 && (
+                    <div className="mt-3 flex gap-2 flex-wrap">
+                      <span className="text-xs text-gray-400">ট্রাই করুন:</span>
+                      {activeCoupons.map((c) => (
+                        <button
+                          key={c.code}
+                          type="button"
+                          onClick={() => { setCouponCode(c.code); }}
+                          className="text-xs px-2 py-1 bg-orange-50 text-orange-600 rounded border border-orange-200 hover:bg-orange-100 transition-colors"
+                        >
+                          {c.code}
+                        </button>
+                      ))}
+                    </div>
+                  )} */}
                 </div>
 
                 {/* ═══ Coin Section ═══ */}
-                <div className="bg-white/90 backdrop-blur rounded-2xl shadow-sm border border-orange-100 p-6">
+                {/* <div className="bg-white/90 backdrop-blur rounded-2xl shadow-sm border border-orange-100 p-6">
                   <div className="flex items-center gap-2 mb-6">
                     <div className="w-8 h-8 rounded-lg bg-linear-to-br from-amber-400 to-orange-500 text-white flex items-center justify-center text-sm font-bold">
                       <Coins className="w-4 h-4" />
@@ -1025,10 +1205,10 @@ export default function CheckoutPage() {
                             <X className="w-4 h-4" />
                           </button>
                         </div>
-                      </div>
+                      </div> */}
 
                       {/* Progress bar showing remaining coins */}
-                      <div className="mt-2">
+                      {/* <div className="mt-2">
                         <div className="flex justify-between text-xs text-gray-500 mb-1">
                           <span>ব্যবহৃত: {appliedCoins.toLocaleString()}</span>
                           <span>অবশিষ্ট: {(userCoinBalance - appliedCoins).toLocaleString()}</span>
@@ -1039,22 +1219,22 @@ export default function CheckoutPage() {
                             style={{ width: `${(appliedCoins / userCoinBalance) * 100}%` }}
                           />
                         </div>
-                      </div>
-                    </div>
+                      </div> */}
+                    {/* </div>
                   )}
-                </div>
+                </div> */}
 
                 {/* Order Notes */}
                 <div className="bg-white/90 backdrop-blur rounded-2xl shadow-sm border border-orange-100 p-6">
                   <div className="flex items-center gap-2 mb-6">
                     <div className="w-8 h-8 rounded-lg bg-linear-to-br from-orange-400 to-orange-500 text-white flex items-center justify-center text-sm font-bold">4</div>
-                    <h2 className="text-lg font-bold text-gray-800">অর্ডার নোট</h2>
+                    <h2 className="text-lg font-bold text-gray-800">{t('checkout.orderNote')}</h2>
                   </div>
 
                   <textarea
                     value={orderNote}
                     onChange={(e) => setOrderNote(e.target.value)}
-                    placeholder="বিশেষ নির্দেশনা লিখুন... (যেমন: গেটে রাখবেন, ডেলিভারির আগে কল করবেন)"
+                    placeholder={t('checkout.orderNotePlaceholder')}
                     rows={3}
                     className="w-full px-4 py-3 border border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-300 focus:border-orange-400 outline-none resize-none bg-white/80"
                   />
@@ -1095,86 +1275,73 @@ export default function CheckoutPage() {
                     <ChevronLeft className="w-5 h-5 text-gray-600" />
                   </button>
                   <div className="w-8 h-8 rounded-lg bg-linear-to-br from-green-400 to-green-500 text-white flex items-center justify-center text-sm font-bold">2</div>
-                  <h2 className="text-lg font-bold text-gray-800">পেমেন্ট পদ্ধতি</h2>
+                  <h2 className="text-lg font-bold text-gray-800">{t('checkout.paymentMethods')}</h2>
                 </div>
 
-                {/* Payment Options */}
-                <div className="space-y-4">
-                  {/* Cash on Delivery */}
-                  <button
-                    onClick={() => { setPaymentMethod('cod'); setUseWallet(false); }}
-                    className={`w-full relative p-5 rounded-xl border-2 text-left transition-all flex items-center gap-4 ${
-                      paymentMethod === 'cod'
-                        ? 'border-orange-400 bg-orange-50 shadow-md'
-                        : 'border-gray-200 hover:border-orange-200 bg-white'
-                    }`}
-                  >
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                      paymentMethod === 'cod' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-500'
-                    }`}>
-                      <Banknote className="w-6 h-6" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-semibold text-gray-800">ক্যাশ অন ডেলিভারি</p>
-                      <p className="text-sm text-gray-500">পণ্য হাতে পেয়ে টাকা পরিশোধ করুন</p>
-                    </div>
-                    {paymentMethod === 'cod' && (
-                      <CheckCircle2 className="w-6 h-6 text-orange-500" />
-                    )}
-                  </button>
-
-                  {/* Wallet Payment */}
-                  <button
-                    onClick={() => { setPaymentMethod('wallet'); setUseWallet(true); }}
-                    disabled={!canUseWallet}
-                    className={`w-full relative p-5 rounded-xl border-2 text-left transition-all flex items-center gap-4 ${
-                      paymentMethod === 'wallet'
-                        ? 'border-emerald-400 bg-emerald-50 shadow-md'
-                        : !canUseWallet
-                        ? 'border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed'
-                        : 'border-gray-200 hover:border-emerald-200 bg-white'
-                    }`}
-                  >
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                      paymentMethod === 'wallet' ? 'bg-emerald-500 text-white' : 'bg-gray-100 text-gray-500'
-                    }`}>
-                      <Wallet className="w-6 h-6" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-semibold text-gray-800">ওয়ালেট পেমেন্ট</p>
-                      <p className="text-sm text-gray-500">
-                        ব্যালেন্স: ৳{walletBalance}
-                        {!canUseWallet && <span className="text-red-500 block text-xs mt-1">মিনিমাম অর্ডার ৳100 প্রয়োজন</span>}
-                      </p>
-                    </div>
-                    {paymentMethod === 'wallet' && (
-                      <CheckCircle2 className="w-6 h-6 text-emerald-500" />
-                    )}
-                  </button>
-
-                  {/* bKash Payment */}
-                  <button
-                    onClick={() => { setPaymentMethod('bkash'); setUseWallet(false); }}
-                    className={`w-full relative p-5 rounded-xl border-2 text-left transition-all flex items-center gap-4 ${
-                      paymentMethod === 'bkash'
-                        ? 'border-pink-400 bg-pink-50 shadow-md'
-                        : 'border-gray-200 hover:border-pink-200 bg-white'
-                    }`}
-                  >
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                      paymentMethod === 'bkash' ? 'bg-pink-500 text-white' : 'bg-gray-100 text-gray-500'
-                    }`}>
-                      <Smartphone className="w-6 h-6" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-semibold text-gray-800">বিকাশ</p>
-                      <p className="text-sm text-gray-500">বিকাশ অ্যাপ দিয়ে পেমেন্ট করুন</p>
-                    </div>
-                    {paymentMethod === 'bkash' && (
-                      <CheckCircle2 className="w-6 h-6 text-pink-500" />
-                    )}
-                  </button>
-                </div>
+                {/* Payment Options — active methods from Dashboard Payment Settings */}
+                {paymentSettingsLoading ? (
+                  <div className="space-y-3">
+                    {[1, 2].map((i) => (
+                      <div key={i} className="h-20 rounded-xl bg-gray-100 animate-pulse" />
+                    ))}
+                  </div>
+                ) : enabledPaymentMethods.length === 0 ? (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                    কোনো পেমেন্ট পদ্ধতি সক্রিয় নেই। অ্যাডমিন প্যানেলে Payment Settings থেকে পদ্ধতি চালু করুন।
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {enabledPaymentMethods.map(({ id }) => {
+                      const cfg = PAYMENT_METHOD_CONFIG[id];
+                      if (!cfg) return null;
+                      const Icon = cfg.icon;
+                      const isSelected = paymentMethod === id;
+                      const isWallet = id === 'wallet';
+                      const isDisabled = isWallet && !canUseWallet;
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => selectPaymentMethod(id)}
+                          disabled={isDisabled}
+                          className={`w-full relative p-5 rounded-xl border-2 text-left transition-all flex items-center gap-4 ${
+                            isSelected
+                              ? `${cfg.border} ${cfg.bg} shadow-md`
+                              : isDisabled
+                              ? 'border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed'
+                              : `border-gray-200 ${cfg.hover} bg-white`
+                          }`}
+                        >
+                          <div
+                            className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                              isSelected ? cfg.iconActive : 'bg-gray-100 text-gray-500'
+                            }`}
+                          >
+                            <Icon className="w-6 h-6" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-semibold text-gray-800">{t(cfg.labelKey)}</p>
+                            <p className="text-sm text-gray-500">
+                              {isWallet ? (
+                                <>
+                                  ব্যালেন্স: ৳{walletBalance}
+                                  {!canUseWallet && (
+                                    <span className="text-red-500 block text-xs mt-1">
+                                      মিনিমাম অর্ডার ৳100 প্রয়োজন
+                                    </span>
+                                  )}
+                                </>
+                              ) : (
+                                cfg.descriptionKey ? t(cfg.descriptionKey) : null
+                              )}
+                            </p>
+                          </div>
+                          {isSelected && <CheckCircle2 className={`w-6 h-6 ${cfg.check}`} />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
 
                 {/* Wallet Payment Details */}
                 {paymentMethod === 'wallet' && (
@@ -1207,11 +1374,14 @@ export default function CheckoutPage() {
                   </div>
                 )}
 
-                {/* bKash Payment Form */}
-                {paymentMethod === 'bkash' && (
-                  <div className="mt-6 p-5 bg-pink-50 rounded-xl border border-pink-200 space-y-4">
-                    <p className="text-sm font-medium text-pink-800">
-                      বিকাশ পেমেন্ট করুন: <span className="font-bold">01XXXXXXXXX</span> (Merchant)
+                {/* Mobile wallet payment form */}
+                {MOBILE_WALLET_METHODS.has(paymentMethod) && PAYMENT_METHOD_CONFIG[paymentMethod] && (
+                  <div
+                    className={`mt-6 p-5 rounded-xl border space-y-4 ${PAYMENT_METHOD_CONFIG[paymentMethod].detailBg} ${PAYMENT_METHOD_CONFIG[paymentMethod].detailBorder}`}
+                  >
+                    <p className={`text-sm font-medium ${PAYMENT_METHOD_CONFIG[paymentMethod].detailText}`}>
+                      {PAYMENT_METHOD_CONFIG[paymentMethod].merchantLabel} পেমেন্ট করুন:{' '}
+                      <span className="font-bold">{supportPhone || '01XXXXXXXXX'}</span> (Merchant)
                     </p>
                     <InputField
                       label="ট্রানজ্যাকশন আইডি (TrxID)"
@@ -1225,6 +1395,15 @@ export default function CheckoutPage() {
                   </div>
                 )}
 
+                {/* Online gateway info */}
+                {ONLINE_GATEWAY_METHODS.has(paymentMethod) && PAYMENT_METHOD_CONFIG[paymentMethod] && (
+                  <div
+                    className={`mt-6 p-4 rounded-lg border text-sm ${PAYMENT_METHOD_CONFIG[paymentMethod].detailBg} ${PAYMENT_METHOD_CONFIG[paymentMethod].detailBorder} ${PAYMENT_METHOD_CONFIG[paymentMethod].detailText}`}
+                  >
+                    💡 অর্ডার কনফার্মের পর {PAYMENT_METHOD_CONFIG[paymentMethod].label} পেমেন্ট পেজে রিডাইরেক্ট করা হবে।
+                  </div>
+                )}
+
                 {/* COD Info */}
                 {paymentMethod === 'cod' && (
                   <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
@@ -1235,7 +1414,7 @@ export default function CheckoutPage() {
                 {/* Place Order Button */}
                 <button
                   onClick={handlePlaceOrder}
-                  disabled={placingOrder || checkoutItems.length === 0}
+                  disabled={placingOrder || checkoutItems.length === 0 || !paymentMethod || enabledPaymentMethods.length === 0}
                   className="w-full mt-6 py-4 bg-linear-to-r from-orange-500 via-amber-500 to-green-500 text-white font-bold text-lg rounded-xl shadow-lg hover:shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-60"
                 >
                   <Lock className="w-5 h-5" />
@@ -1281,7 +1460,7 @@ export default function CheckoutPage() {
                         <div className="w-16 h-16 rounded-lg bg-orange-50 flex items-center justify-center text-2xl border border-orange-100">🫙</div>
                       )}
                       <div className="flex-1 min-w-0">
-                        <h3 className="text-sm font-semibold text-gray-800 truncate">{item.name}</h3>
+                        <h3 className="heading-product-name text-sm font-semibold text-gray-800 truncate">{item.name}</h3>
                         {item.variation && <p className="text-xs text-orange-600 mt-0.5">{item.variation}</p>}
                         <div className="flex items-center justify-between mt-1">
                           <span className="text-xs text-gray-500">x{item.qty}</span>
@@ -1296,7 +1475,7 @@ export default function CheckoutPage() {
                   {/* Price Breakdown */}
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between text-gray-600">
-                      <span>সাবটোটাল</span>
+                      <span>{t('checkout.subtotal')}</span>
                       <span>৳{subtotal}</span>
                     </div>
                     <div className="flex justify-between text-gray-600">
@@ -1328,12 +1507,12 @@ export default function CheckoutPage() {
 
                   <div className="border-t-2 border-dashed border-orange-200 pt-3">
                     <div className="flex justify-between items-center">
-                      <span className="text-base font-bold text-gray-800">মোট</span>
+                      <span className="text-base font-bold text-gray-800">{t('checkout.total')}</span>
                       <span className="text-2xl font-bold text-orange-600">
                         ৳{finalTotal}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-400 mt-1 text-right">সব ট্যাক্স ও চার্জ অন্তর্ভুক্ত</p>
+                    <p className="text-xs text-gray-400 mt-1 text-right">{t('checkout.taxIncluded')}</p>
                   </div>
                 </div>
               </div>
@@ -1342,15 +1521,15 @@ export default function CheckoutPage() {
               <div className="grid grid-cols-3 gap-2 text-center text-xs text-gray-500">
                 <div className="bg-white/60 rounded-lg p-2 border border-orange-100">
                   <div className="text-lg mb-1">🔒</div>
-                  <p>নিরাপদ পেমেন্ট</p>
+                  <p>{t('checkout.securePayment')}</p>
                 </div>
                 <div className="bg-white/60 rounded-lg p-2 border border-orange-100">
                   <div className="text-lg mb-1">🚚</div>
-                  <p>দ্রুত ডেলিভারি</p>
+                  <p>{t('checkout.fastDelivery')}</p>
                 </div>
                 <div className="bg-white/60 rounded-lg p-2 border border-orange-100">
                   <div className="text-lg mb-1">✅</div>
-                  <p>অরিজিনাল পণ্য</p>
+                  <p>{t('checkout.originalProduct')}</p>
                 </div>
               </div>
             </div>

@@ -1,4 +1,5 @@
 import { Link } from 'react-router';
+import { useTranslation } from 'react-i18next';
 import { useCart } from '../useCart.jsx';
 
 const CartItemImage = ({ image, name }) => {
@@ -33,6 +34,7 @@ const CartDrawer = ({
   cartCount,
   cartTotal,
 }) => {
+  const { t } = useTranslation();
   const { monthlySubscription, toggleMonthlySubscription } = useCart();
 
   if (!isOpen) return null;
@@ -47,8 +49,8 @@ const CartDrawer = ({
       <div className="fixed top-0 right-0 h-full w-[85%] sm:w-96 lg:w-105 bg-white shadow-2xl z-50 flex flex-col animate-slide-in-right">
         <div className="p-5 border-b border-emerald-100 flex justify-between items-center bg-linear-to-r from-emerald-50 to-orange-50">
           <div>
-            <h2 className="text-lg font-bold text-emerald-800">Shopping Cart</h2>
-            <p className="text-xs text-emerald-500 font-medium">{cartCount} items in cart</p>
+            <h2 className="text-lg font-bold text-emerald-800">{t('nav.shoppingCart')}</h2>
+            <p className="text-xs text-emerald-500 font-medium">{t('nav.itemsInCart', { count: cartCount })}</p>
           </div>
           <button
             onClick={onClose}
@@ -77,7 +79,7 @@ const CartDrawer = ({
                     <h4 className="font-bold text-emerald-800 text-sm truncate">{item.name}</h4>
                     {item.isFlashSale && (
                       <span className="shrink-0 text-[9px] font-bold uppercase tracking-wider bg-red-500 text-white px-2 py-0.5 rounded-full">
-                        Flash Sale
+                        {t('nav.flashSaleBadge')}
                       </span>
                     )}
                   </div>
@@ -123,7 +125,7 @@ const CartDrawer = ({
                   onClick={() => onRemoveItem(item.cartId)}
                   className="text-red-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl flex items-center justify-center transition shrink-0"
                   type="button"
-                  aria-label="Remove item"
+                  aria-label={t('nav.removeItem')}
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -134,8 +136,8 @@ const CartDrawer = ({
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-emerald-300">
               <span className="text-6xl mb-4">🛒</span>
-              <p className="text-lg font-bold text-emerald-600">Your cart is empty</p>
-              <p className="text-sm">Add some delicious achar!</p>
+              <p className="text-lg font-bold text-emerald-600">{t('nav.cartEmpty')}</p>
+              <p className="text-sm">{t('nav.cartEmptyHint')}</p>
             </div>
           )}
         </div>
@@ -150,7 +152,7 @@ const CartDrawer = ({
               className="h-5 w-5 rounded border-amber-300 text-orange-500 focus:ring-orange-400 cursor-pointer"
             />
             <label htmlFor="monthly-cart" className="text-gray-700 cursor-pointer select-none text-sm">
-              আমি প্রতি মাসেই কিনতে চাই
+              {t('nav.monthlySubscribe')}
             </label>
           </div>
         )}
@@ -158,7 +160,7 @@ const CartDrawer = ({
         {cartItems.length > 0 && (
           <div className="p-5 border-t border-emerald-100 bg-linear-to-b from-white to-emerald-50/30 space-y-3">
             <div className="flex justify-between items-center text-lg font-bold text-emerald-800">
-              <span>Total:</span>
+              <span>{t('nav.total')}</span>
               <span className="text-orange-500">৳{cartTotal}</span>
             </div>
             <Link
@@ -166,14 +168,14 @@ const CartDrawer = ({
               onClick={onClose}
               className="block w-full text-center bg-linear-to-r from-orange-300 to-orange-400 text-white py-3.5 rounded-xl font-bold hover:from-orange-400 hover:to-orange-500 transition shadow-lg shadow-orange-200"
             >
-              Proceed to Checkout
+              {t('nav.proceedCheckout')}
             </Link>
             <button
               onClick={onClose}
               className="w-full bg-white border border-emerald-200 text-emerald-700 py-3 rounded-xl font-bold hover:bg-emerald-50 transition"
               type="button"
             >
-              Continue Shopping
+              {t('nav.continueShopping')}
             </button>
           </div>
         )}

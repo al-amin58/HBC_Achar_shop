@@ -1,6 +1,9 @@
+import mongoose from "mongoose";
 import Product from "../../models/Product.js";
-import ProductVariation from "../../models/ProductVariation.js";
+import Category from "../../models/Category.js";
+import SubCategory from "../../models/SubCategory.js";
 import Settings from "../../models/Settings.js";
+import { getPublicWebConfig } from "../backend/settingsController.js";
 
 const SETTINGS_KEY = "default";
 
@@ -10,6 +13,12 @@ const toPrice = (val) => {
   const n = Number(String(val).replace(/,/g, "").trim());
   return Number.isFinite(n) && n >= 0 ? n : null;
 };
+
+const normalizeAttrKey = (val) =>
+  String(val || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "");
 
 /**
  * Product + variations populate করে Home page format এ return করে
@@ -42,6 +51,15 @@ const formatProduct = (p, extraFields = {}) => {
         originalPrice = regularVarPrice ?? productOriginalPrice ?? null;
       }
 
+      const combination = Array.isArray(varDoc?.combination) ? varDoc.combination : [];
+      const attributes = {};
+      for (const item of combination) {
+        const key = normalizeAttrKey(item?.attributeName);
+        const value = String(item?.value || "").trim();
+        if (!key || !value) continue;
+        attributes[key] = value;
+      }
+
       return {
         id: varId,
         label: varDoc?.combination?.length
@@ -50,9 +68,14 @@ const formatProduct = (p, extraFields = {}) => {
         price,
         discountPrice: flashVarPrice,
         originalPrice,
-        stock: Number(varDoc?.stock) || 0,
+        stock:
+          varDoc?.stock != null && String(varDoc.stock).trim() !== ""
+            ? Math.max(0, Number(varDoc.stock))
+            : null,
         flashSale: useFlashPrice,
         image: varDoc?.image || null,
+        combination,
+        attributes,
       };
     })
     .filter(Boolean)
@@ -86,6 +109,7 @@ const formatProduct = (p, extraFields = {}) => {
     sku: p.sku,
     brand: p.brand || "",
     description: p.description || "",
+    createdAt: p.createdAt ? new Date(p.createdAt).toISOString() : null,
     category:
       p.category && p.category._id
         ? { id: String(p.category._id), name: p.category.name, slug: p.category.slug }
@@ -177,15 +201,155 @@ export const getHomePageData = async (_req, res) => {
       fetchByIds(bestSellingIds),
     ]);
 
+    const { heroSlides, campaignBanner, ads } = getPublicWebConfig(
+      settingsDoc.webConfig
+    );
+
     return res.json({
       flashSaleEndsAt,
       flashSaleProducts,
       featuredProducts,
       newArrivals,
       bestSelling,
+      heroSlides,
+      campaignBanner,
+      ads,
     });
   } catch (err) {
     console.error("getHomePageData error:", err);
     return res.status(500).json({ message: "Failed to load home page data." });
+  }
+};
+
+export const getProducts = async (req, res) => {
+  try {
+    const categorySlug = String(req.query?.category || "")
+      .trim()
+      .toLowerCase();
+
+    const filter = { status: { $ne: "draft" } };
+    let category = null;
+
+    if (categorySlug) {
+      const cat = await Category.findOne({ slug: categorySlug }).lean();
+      if (!cat || cat._id == null) {
+        return res.json({ category: null, products: [] });
+      }
+      category = { id: String(cat._id), name: cat.name, slug: cat.slug };
+      filter.category = cat._id;
+    }
+
+    const rows = await Product.find(filter)
+      .populate(productPopulate)
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const products = rows
+      .map((p) => {
+        if (p?.status === "flash") {
+          const total = (p.stock || 0) + (p.sold || 0);
+          return formatProduct(p, { total, isFlash: true });
+        }
+        return formatProduct(p);
+      })
+      .filter(Boolean);
+
+    return res.json({ category, products });
+  } catch (err) {
+    console.error("getProducts error:", err);
+    return res.status(500).json({ message: "Failed to load products." });
+  }
+};
+
+export const getSubCategories = async (req, res) => {
+  try {
+    const categorySlug = String(req.query?.category || "")
+      .trim()
+      .toLowerCase();
+
+    if (!categorySlug) {
+      return res.json({ category: null, subcategories: [] });
+    }
+
+    const cat = await Category.findOne({ slug: categorySlug }).lean();
+    if (!cat || cat._id == null) {
+      return res.json({ category: null, subcategories: [] });
+    }
+
+    const rows = await SubCategory.find({
+      category: cat._id,
+      status: "active",
+    })
+      .select("name slug")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const subcategories = rows
+      .map((s) => ({
+        id: String(s?._id || ""),
+        name: String(s?.name || "").trim(),
+        slug: String(s?.slug || "").trim(),
+      }))
+      .filter((s) => s.id && s.slug && s.name);
+
+    return res.json({
+      category: { id: String(cat._id), name: cat.name, slug: cat.slug },
+      subcategories,
+    });
+  } catch (err) {
+    console.error("getSubCategories error:", err);
+    return res.status(500).json({ message: "Failed to load sub-categories." });
+  }
+};
+
+/**
+ * GET /api/product/:id — Public single product for product detail page
+ */
+export const getProductById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid product id." });
+    }
+
+    const p = await Product.findById(id).populate(productPopulate).lean();
+
+    if (!p || p.status === "draft") {
+      return res.status(404).json({ message: "Product not found." });
+    }
+
+    const isFlash = p.status === "flash";
+    const product = formatProduct(p, isFlash ? { isFlash: true, total: (p.stock || 0) + (p.sold || 0) } : {});
+
+    if (!product) {
+      return res.status(404).json({ message: "Product not found." });
+    }
+
+    const categoryId = p.category?._id || p.category;
+    let relatedProducts = [];
+
+    if (categoryId) {
+      const relatedRaw = await Product.find({
+        category: categoryId,
+        _id: { $ne: p._id },
+        status: { $in: ["active", "flash"] },
+      })
+        .populate(productPopulate)
+        .sort({ createdAt: -1 })
+        .limit(4)
+        .lean();
+
+      relatedProducts = relatedRaw
+        .map((row) =>
+          formatProduct(row, row.status === "flash" ? { isFlash: true } : {})
+        )
+        .filter(Boolean);
+    }
+
+    return res.json({ product, relatedProducts });
+  } catch (err) {
+    console.error("getProductById error:", err);
+    return res.status(500).json({ message: "Failed to load product." });
   }
 };

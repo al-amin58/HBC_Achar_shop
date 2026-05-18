@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { pages } from "../../pages/website/data/navbarData.js";
 
 function MobileMenuTabButton({ label, tabKey, activeTab, setActiveTab }) {
@@ -17,18 +18,19 @@ function MobileMenuTabButton({ label, tabKey, activeTab, setActiveTab }) {
   );
 }
 
-function MobileMenuGridItem({ item }) {
+function MobileMenuGridItem({ item, label }) {
   return (
     <a
       href={item.href}
       className="flex items-center gap-2 py-2 px-3 text-sm text-emerald-800 hover:text-orange-500 hover:bg-orange-50 rounded-xl transition font-medium border border-emerald-100 hover:border-orange-200"
     >
-      <span>{item.name}</span>
+      <span>{label}</span>
     </a>
   );
 }
 
 const MobileMenu = ({ isOpen, onClose, categories = [] }) => {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState("categories");
 
   if (!isOpen) return null;
@@ -67,13 +69,13 @@ const MobileMenu = ({ isOpen, onClose, categories = [] }) => {
 
         <div className="flex p-2 gap-2 bg-emerald-50 border-b border-emerald-100">
           <MobileMenuTabButton
-            label="Categories"
+            label={t('nav.categories')}
             tabKey="categories"
             activeTab={activeTab}
             setActiveTab={setActiveTab}
           />
           <MobileMenuTabButton
-            label="Pages"
+            label={t('nav.pages')}
             tabKey="pages"
             activeTab={activeTab}
             setActiveTab={setActiveTab}
@@ -82,12 +84,16 @@ const MobileMenu = ({ isOpen, onClose, categories = [] }) => {
 
         <div className="p-5 animate-fadeIn">
           <h3 className="font-bold text-orange-400 text-xs uppercase tracking-wider mb-3">
-            {activeTab === "categories" ? "Categories" : "Pages"}
+            {activeTab === "categories" ? t('nav.categories') : t('nav.pages')}
           </h3>
           <div className="grid grid-cols-2 gap-2">
             {(activeTab === "categories" ? categories : pages).map(
               (item, idx) => (
-                <MobileMenuGridItem key={idx} item={item} />
+                <MobileMenuGridItem
+                  key={idx}
+                  item={item}
+                  label={item.nameKey ? t(item.nameKey) : item.name}
+                />
               ),
             )}
           </div>

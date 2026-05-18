@@ -313,7 +313,7 @@ const TrackOrder = () => {
                           <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h4 className="font-semibold text-gray-800 text-sm sm:text-base">{item.name}</h4>
+                          <h4 className="heading-product-name font-semibold text-gray-800 text-sm sm:text-base">{item.name}</h4>
                           <p className="text-xs text-gray-500 mt-0.5">{item.variant}</p>
                           <div className="flex items-center justify-between mt-2">
                             <p className="text-sm font-bold text-orange-600">৳{item.price} × {item.qty}</p>

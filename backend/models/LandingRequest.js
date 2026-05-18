@@ -11,6 +11,7 @@ const landingRequestSchema = new mongoose.Schema(
       enum: ["Pending", "Approved", "Published", "Under Review", "Rejected"],
       default: "Pending",
     },
+    adminNote: { type: String, default: "" },
   },
   { timestamps: true }
 );

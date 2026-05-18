@@ -20,6 +20,7 @@ const Navbar = () => {
     supportPhone: "",
     storeAddress: "",
     logoPreview: "",
+    campaignBanner: null,
   });
 
   // Escape key - global
@@ -75,6 +76,10 @@ const Navbar = () => {
           supportPhone: String(data.supportPhone || ""),
           storeAddress: String(data.storeAddress || ""),
           logoPreview: String(data.logoPreview || ""),
+          campaignBanner:
+            data.campaignBanner && typeof data.campaignBanner === "object"
+              ? data.campaignBanner
+              : null,
         });
       } catch {
         if (!alive) return;
@@ -97,6 +102,7 @@ const Navbar = () => {
 
       {/* CampaignBanner - NOT sticky, scrolls away */}
       <CampaignBanner
+        data={publicSettings.campaignBanner}
         isVisible={isBannerVisible}
         onClose={() => setIsBannerVisible(false)}
       />

@@ -1,6 +1,7 @@
 // InvoicePage.jsx
 import { useRef, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
+import { useTranslation } from 'react-i18next';
 import api from '../../api/axios';
 
 const formatBnDate = (d) =>
@@ -8,13 +9,22 @@ const formatBnDate = (d) =>
     ? new Date(d).toLocaleDateString('bn-BD', { day: 'numeric', month: 'long', year: 'numeric' })
     : '';
 
-const paymentMethodLabel = (m) =>
-  ({ cod: 'ক্যাশ অন ডেলিভারি', bkash: 'bKash', nagad: 'Nagad' }[m] || m);
+const paymentMethodLabel = (m, t) =>
+  t(`invoice.paymentMethods.${m}`, { defaultValue: m });
 
-const paymentStatusLabel = (s) =>
-  ({ pending: 'অপেক্ষমাণ', paid: 'পরিশোধিত', confirmed: 'নিশ্চিত' }[s] || s);
+const paymentStatusLabel = (s, t) =>
+  t(`invoice.paymentStatus.${s}`, { defaultValue: s });
 
-const buildInvoiceView = (order, settings) => ({
+// Helper to render logo - image or emoji
+const LogoDisplay = ({ logo, className = '' }) => {
+  const isImage = logo && (logo.startsWith('http') || logo.startsWith('data:') || logo.startsWith('/'));
+  if (isImage) {
+    return <img src={logo} alt="Logo" className={className} onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling?.classList?.remove('hidden'); }} />;
+  }
+  return <span className={className}>{logo || '🫙'}</span>;
+};
+
+const buildInvoiceView = (order, settings, t) => ({
   invoiceNo: `INV-${order.orderNumber}`,
   orderId: order.orderNumber,
   issueDate: formatBnDate(order.createdAt),
@@ -25,9 +35,10 @@ const buildInvoiceView = (order, settings) => ({
     nameEn: settings?.siteTitle || '',
     address: settings?.storeAddress || '',
     phone: settings?.supportPhone || '',
-    email: '',
-    website: '',
-    logo: '🫙',
+    email: settings?.email || '',
+    website: settings?.website || '',
+    logo: settings?.logoPreview || '🫙',
+    footer: settings?.invoiceFooter || '',
   },
   customer: {
     name: order.customer?.fullName || '',
@@ -39,7 +50,7 @@ const buildInvoiceView = (order, settings) => ({
     postcode: '',
   },
   shipping: {
-    method: 'হোম ডেলিভারি',
+    method: t('invoice.homeDelivery'),
     charge: order.pricing?.deliveryCharge || 0,
     address: order.shipping?.fullAddress || order.customer?.address || '',
     note: order.orderNote || '',
@@ -63,14 +74,15 @@ const buildInvoiceView = (order, settings) => ({
     totalInWords: `৳${order.pricing?.total || 0}`,
   },
   payment: {
-    method: paymentMethodLabel(order.payment?.method),
-    status: paymentStatusLabel(order.payment?.status),
+    method: paymentMethodLabel(order.payment?.method, t),
+    status: paymentStatusLabel(order.payment?.status, t),
     paid: order.payment?.paid || 0,
     due: order.payment?.due ?? order.pricing?.total,
   },
 });
 
 export default function InvoicePage() {
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const invoiceRef = useRef(null);
@@ -78,28 +90,40 @@ export default function InvoicePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const orderId = searchParams.get('id');
+
+  // Handle missing orderId without setState in effect
+  const initialError = !orderId ? t('invoice.noOrderId') : '';
+
   useEffect(() => {
-    const orderId = searchParams.get('id');
-    if (!orderId) {
-      setError('অর্ডার আইডি পাওয়া যায়নি');
-      setLoading(false);
-      return;
-    }
+    if (!orderId) return;
+
+    let cancelled = false;
     const load = async () => {
       try {
         const [orderRes, settingsRes] = await Promise.all([
           api.get(`/orders/${orderId}`),
           api.get('/settings/public'),
         ]);
-        setInvoiceData(buildInvoiceView(orderRes.data, settingsRes.data));
+        if (!cancelled) {
+          setInvoiceData(buildInvoiceView(orderRes.data, settingsRes.data, t));
+        }
       } catch (err) {
-        setError(err.response?.data?.message || 'ইনভয়েস লোড করা যায়নি');
+        if (!cancelled) {
+          setError(err.response?.data?.message || t('invoice.loadFailed'));
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
     void load();
-  }, [searchParams]);
+    return () => { cancelled = true; };
+  }, [orderId]);
+
+  // Use initial error state when orderId is missing
+  const displayError = initialError || error;
 
   const handlePrint = () => {
     window.print();
@@ -109,20 +133,32 @@ export default function InvoicePage() {
     window.print();
   };
 
-  if (loading) {
+  // Show error immediately if orderId is missing, otherwise show loading
+  if (displayError) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-emerald-700">
-        ইনভয়েস লোড হচ্ছে...
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-4">
+        <p className="text-red-600">{displayError}</p>
+        <button type="button" onClick={() => navigate('/')} className="text-orange-600 font-bold">
+          {t('invoice.backHome')}
+        </button>
       </div>
     );
   }
 
-  if (error || !invoiceData) {
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-emerald-700">
+        {t('invoice.loading')}
+      </div>
+    );
+  }
+
+  if (!invoiceData) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-4">
-        <p className="text-red-600">{error || 'ডাটা পাওয়া যায়নি'}</p>
+        <p className="text-red-600">{displayError || t('invoice.noData')}</p>
         <button type="button" onClick={() => navigate('/')} className="text-orange-600 font-bold">
-          হোমে যান
+          {t('invoice.backHome')}
         </button>
       </div>
     );
@@ -135,12 +171,12 @@ export default function InvoicePage() {
       <div className="bg-white/80 backdrop-blur-md border-b border-orange-100 sticky top-0 z-50 print:hidden">
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-linear-to-br from-orange-400 to-green-400 flex items-center justify-center text-white font-bold">
-              {invoiceData.business.logo}
+            <div className="w-9 h-9 rounded-full bg-linear-to-br from-orange-400 to-green-400 flex items-center justify-center text-white font-bold overflow-hidden">
+              <LogoDisplay logo={invoiceData.business.logo} className="w-full h-full object-cover" />
             </div>
             <div>
               <h1 className="font-bold text-gray-800 text-sm">{invoiceData.business.name}</h1>
-              <p className="text-xs text-gray-500">ইনভয়েস</p>
+              <p className="text-xs text-gray-500">{t('invoice.title')}</p>
             </div>
           </div>
           
@@ -190,8 +226,8 @@ export default function InvoicePage() {
                 
                 {/* Business Info */}
                 <div className="flex gap-4">
-                  <div className="w-16 h-16 rounded-2xl bg-linear-to-br from-orange-400 to-green-400 flex items-center justify-center text-white text-2xl font-bold shadow-lg">
-                    {invoiceData.business.logo}
+                  <div className="w-16 h-16 flex items-center justify-center shadow-lg overflow-hidden">
+                    <LogoDisplay logo={invoiceData.business.logo} className="w-full h-full object-cover" />
                   </div>
                   <div>
                     <h2 className="text-2xl font-bold text-gray-800">{invoiceData.business.name}</h2>
@@ -200,7 +236,6 @@ export default function InvoicePage() {
                       <p>📍 {invoiceData.business.address}</p>
                       <p>📞 {invoiceData.business.phone}</p>
                       <p>✉️ {invoiceData.business.email}</p>
-                      <p>🌐 {invoiceData.business.website}</p>
                     </div>
                   </div>
                 </div>
@@ -397,8 +432,8 @@ export default function InvoicePage() {
           {/* Footer */}
           <div className="bg-linear-to-r from-gray-50 to-orange-50 border-t border-gray-100 p-8">
             <div className="text-center space-y-3">
-              <div className="w-12 h-12 mx-auto rounded-full bg-linear-to-br from-orange-400 to-green-400 flex items-center justify-center text-white text-xl font-bold">
-                {invoiceData.business.logo}
+              <div className="w-12 h-12 mx-auto   flex items-center justify-center  overflow-hidden">
+                <LogoDisplay logo={invoiceData.business.logo} className="w-full h-full object-cover" />
               </div>
               <div>
                 <p className="font-bold text-gray-800">{invoiceData.business.name} - এ আপনাকে স্বাগতম</p>
@@ -408,11 +443,9 @@ export default function InvoicePage() {
                 <span>📞 {invoiceData.business.phone}</span>
                 <span>•</span>
                 <span>✉️ {invoiceData.business.email}</span>
-                <span>•</span>
-                <span>🌐 {invoiceData.business.website}</span>
               </div>
               <p className="text-xs text-gray-400 mt-4">
-                এই ইনভয়েসটি কম্পিউটার জেনারেটেড, কোনো স্বাক্ষর প্রয়োজন নেই।
+                {invoiceData.business.footer || 'এই ইনভয়েসটি কম্পিউটার জেনারেটেড, কোনো স্বাক্ষর প্রয়োজন নেই।'}
               </p>
             </div>
           </div>

@@ -34,6 +34,8 @@ import Products from "./pages/admin/Products.jsx";
 import Customers from "./pages/admin/Customers.jsx";
 import Setting from "./pages/admin/Setting.jsx";
 import Orders from "./pages/admin/Orders.jsx";
+import Campaignbanner from "./pages/admin/Campaignbanner.jsx";
+import Coupons from "./pages/admin/coupons.jsx";
 
 
 const router = createBrowserRouter([
@@ -112,6 +114,8 @@ const router = createBrowserRouter([
           {  path: "settings", element:<Setting/>},
           {  path: "customers", element:<Customers/>},
           {  path: "flash-sale", element:<Navigate to="/admin/settings?tab=flash" replace />},
+          {  path: "campaign-banner", element:<Campaignbanner/>},
+          {  path: "coupons", element:<Coupons/>},
         ]
       },
     ],

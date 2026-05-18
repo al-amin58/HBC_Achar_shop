@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import SearchBar from '../SearchBar.jsx';
 
 const MainNavbar = ({ 
@@ -8,6 +9,7 @@ const MainNavbar = ({
   onMobileMenuOpen,
   logoUrl
 }) => {
+  const { t } = useTranslation();
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
 
   return (
@@ -47,7 +49,7 @@ const MainNavbar = ({
               className="hidden lg:flex items-center gap-1.5 bg-linear-to-r from-orange-200 to-orange-100 text-orange-700 px-4 py-2 rounded-full font-bold text-sm hover:from-orange-300 hover:to-orange-200 transition border border-orange-200 shadow-sm"
             >
               <span className="animate-bounce">🔥</span>
-              Flash Sale
+              {t('nav.flashSale')}
             </a>
 
             {/* Mobile Search Toggle */}

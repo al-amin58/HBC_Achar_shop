@@ -27,11 +27,11 @@ export const categories = [
 ];
 
 export const pages = [
-  { name: 'Home', icon: '🏠', href: '/' },
-  { name: 'Flash Sale', icon: '🔥', href: '/flash-sale' },
-  { name: 'Cart', icon: '🛒', href: '/cart' },
-  { name: 'Account', icon: '👤', href: '/customer' },
-  { name: 'About Us', icon: 'ℹ️', href: '/about' },
-  { name: 'Contact', icon: '📞', href: '/contact' },
+  { nameKey: 'nav.pagesList.home', icon: '🏠', href: '/' },
+  { nameKey: 'nav.pagesList.flashSale', icon: '🔥', href: '/flash-sale' },
+  { nameKey: 'nav.pagesList.cart', icon: '🛒', href: '/cart' },
+  { nameKey: 'nav.pagesList.account', icon: '👤', href: '/customer' },
+  { nameKey: 'nav.pagesList.about', icon: 'ℹ️', href: '/about' },
+  { nameKey: 'nav.pagesList.contact', icon: '📞', href: '/contact' },
 ];
 

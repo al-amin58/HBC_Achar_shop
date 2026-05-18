@@ -8,7 +8,7 @@ const MainLayout = () => {
   return (
     <CartProvider>
       <div
-        className="flex flex-col min-h-screen my-heading"
+        className="flex flex-col min-h-screen website-pages"
         style={{
           background:
             "linear-gradient(90deg, #fdba74, #fde68a, #86efac, #fcd34d, #fdba74)",

@@ -1,6 +1,7 @@
 import Cart from '../models/Cart.js';
 import Order from '../models/Order.js';
 import User from '../models/User.js';
+import { incrementCouponUsage } from './backend/couponController.js';
 
 const makeOrderNumber = () => {
   const d = new Date();
@@ -170,6 +171,10 @@ export const createOrder = async (req, res) => {
       $inc: { totalOrders: 1, totalSpend: total },
     });
 
+    if (couponCode) {
+      await incrementCouponUsage(couponCode);
+    }
+
     return res.status(201).json(formatOrder(order));
   } catch (error) {
     console.error('createOrder error:', error);
@@ -189,6 +194,33 @@ export const getMyOrders = async (req, res) => {
     return res.json(orders.map(formatOrder));
   } catch (error) {
     return res.status(500).json({ message: 'Failed to load orders' });
+  }
+};
+
+/** PATCH /api/orders/:id/cancel */
+export const cancelOrder = async (req, res) => {
+  try {
+    const order = await Order.findOne({ _id: req.params.id, user: req.user._id });
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+
+    const cancellable = ['pending', 'confirmed', 'processing'];
+    if (!cancellable.includes(order.status)) {
+      return res.status(400).json({
+        message: 'এই অর্ডারটি আর বাতিল করা যাবে না',
+      });
+    }
+
+    order.status = 'cancelled';
+    if (order.payment) {
+      order.payment.status = 'cancelled';
+    }
+    await order.save();
+
+    return res.json(formatOrder(order.toObject()));
+  } catch (error) {
+    return res.status(500).json({ message: error.message || 'Failed to cancel order' });
   }
 };
 

@@ -13,8 +13,11 @@ import ProductRoutes from "./routes/productRoutes.js";
 import CustomerRoutes from "./routes/customers.js";
 import SettingsRoutes from "./routes/settingsRoutes.js";
 import HomeRoutes from "./routes/homeRoutes.js";
+import ProductPublicRoutes from "./routes/productPublicRoutes.js";
 import CartRoutes from "./routes/cartRoutes.js";
 import OrderRoutes from "./routes/orderRoutes.js";
+import CouponRoutes from "./routes/couponRoutes.js";
+import ProfileRoutes from "./routes/profileRoutes.js";
 
 
 dotenv.config();
@@ -53,19 +56,48 @@ app.use('/api/products', ProductRoutes);
 app.use('/api/customers', CustomerRoutes);
 app.use('/api/settings', SettingsRoutes);
 app.use('/api/home', HomeRoutes);
+app.use('/api/product', ProductPublicRoutes);
 app.use('/api/cart', CartRoutes);
 app.use('/api/orders', OrderRoutes);
+app.use('/api/coupons', CouponRoutes);
+app.use('/api/profile', ProfileRoutes);
 
 app.use('/api/auth', authRoutes);
 
+const PORT = Number(process.env.PORT) || 5001;
+
 const startServer = async () => {
+  if (globalThis.__hbcServer) {
+    console.log(`Server already running on port ${PORT}`);
+    return;
+  }
+
   const isDbConnected = await connectDB();
   if (!isDbConnected) {
     process.exit(1);
   }
 
-  app.listen(5001, () => {
-    console.log("Server is running on port 5001");
+  const server = app.listen(PORT);
+
+  server.once("listening", () => {
+    globalThis.__hbcServer = server;
+    console.log(`Server is running on http://localhost:${PORT}`);
+    console.log("Coupon API: /api/coupons");
+    console.log("Product API: /api/home/product/:id");
+  });
+
+  server.once("error", (err) => {
+    if (err.code === "EADDRINUSE") {
+      console.error(`\nPort ${PORT} is already in use — another backend is still running.`);
+      console.error("Fix (run once in the backend folder):");
+      console.error("  npm run stop");
+      console.error("Then start again:");
+      console.error("  node server.js");
+      console.error("\nOr close the other terminal where node server.js / npm run dev is running.\n");
+    } else {
+      console.error(err);
+    }
+    process.exit(1);
   });
 };
 

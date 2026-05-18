@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { searchData } from "../pages/website/data/navbarData.js";
 
 const SearchBar = ({ mobile = false }) => {
+  const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
   const searchRef = useRef(null);
@@ -40,7 +42,7 @@ const SearchBar = ({ mobile = false }) => {
             setShowSuggestions(e.target.value.length > 0);
           }}
           onFocus={() => query && setShowSuggestions(true)}
-          placeholder="Search mango achar, spicy pickles..."
+          placeholder={t('nav.searchPlaceholder')}
           className={inputClasses}
         />
         <button
@@ -67,7 +69,7 @@ const SearchBar = ({ mobile = false }) => {
           className={`bg-white  border border-emerald-100 py-2 z-50 overflow-hidden ${mobile ? "mt-2 rounded-xl absolute left-2 right-2" : "  absolute top-full left-0 right-0 mt-2 rounded-2xl shadow-2xl shadow-emerald-100 "}`}
         >
           <div className="px-4 py-2 text-xs font-bold text-emerald-400 uppercase tracking-wider">
-            Suggestions
+            {t('nav.suggestions')}
           </div>
           {filtered.length > 0 ? (
             filtered.map((item, idx) => (
@@ -96,7 +98,7 @@ const SearchBar = ({ mobile = false }) => {
             ))
           ) : (
             <div className="px-4 py-3 text-emerald-300 text-sm">
-              No products found
+              {t('nav.noProductsFound')}
             </div>
           )}
         </div>

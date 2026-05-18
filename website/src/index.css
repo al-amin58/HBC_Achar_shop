@@ -1,13 +1,36 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: "Hugh Is Life Personal Use";
+  src: url("/fonts/hugh-is-life-personal-use.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+/* Website pages: decorative headings in English only (see MainLayout `website-pages`) */
+html[lang="en"] .website-pages :is(h1, h2, h3, h4, h5, h6):not(.heading-product-name) {
+  font-family: "Hugh Is Life Personal Use", ui-sans-serif, system-ui, sans-serif !important;
+}
+
+html[lang="en"] .website-pages .heading-product-name,
+html[lang="en"] .website-pages :is(h1, h2, h3, h4, h5, h6).heading-product-name {
+  font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+    "Segoe UI Symbol", "Noto Color Emoji";
+}
+
+html[lang="en"] .website-pages .product-description :is(h1, h2, h3, h4, h5, h6) {
+  font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+    "Segoe UI Symbol", "Noto Color Emoji";
+}
 
 /* Sidebar / panels: scroll without visible scrollbar */
-@utility scrollbar-none {
+.scrollbar-none {
   scrollbar-width: none;
   -ms-overflow-style: none;
-  &::-webkit-scrollbar {
-    display: none;
-  }
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }
 
 
@@ -26,4 +49,39 @@
   outline: none;
 }
 
-                
+
+/* ── Customer Dashboard — Ant Design overrides ───────────────── */
+.ant-table-modern .ant-table-thead > tr > th {
+  background: #f9fafb !important;
+  font-weight: 600 !important;
+  font-size: 12px !important;
+  color: #6b7280 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid #f3f4f6 !important;
+}
+.ant-table-modern .ant-table-tbody > tr > td {
+  border-bottom: 1px solid #f9fafb !important;
+}
+.ant-table-modern .ant-table-tbody > tr:last-child > td {
+  border-bottom: none !important;
+}
+
+/* Sidebar menu item */
+.ant-menu-item {
+  border-radius: 12px !important;
+  margin-bottom: 2px !important;
+}
+.ant-menu-item-selected {
+  background: linear-gradient(135deg, #fff3e8, #ffe8d4) !important;
+}
+
+/* Steps in drawer */
+.ant-steps-item-title {
+  font-size: 11px !important;
+}
+
+/* Collapse FAQ */
+.ant-collapse-header {
+  border-radius: 12px !important;
+}
