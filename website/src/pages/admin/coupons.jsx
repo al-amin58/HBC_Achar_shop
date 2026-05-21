@@ -130,7 +130,10 @@ export default function Coupons() {
   };
 
   useEffect(() => {
-    fetchCoupons();
+    const loadCoupons = async () => {
+      await fetchCoupons();
+    };
+    loadCoupons();
   }, []);
 
   const stats = useMemo(() => {
@@ -370,7 +373,7 @@ export default function Coupons() {
       ) : (
         <GlassCard className="overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px]">
+            <table className="w-full min-w-225">
               <thead>
                 <tr className="text-left text-xs font-semibold text-purple-300 uppercase tracking-wider bg-white/5">
                   <th className="px-6 py-4">Code</th>
@@ -402,7 +405,7 @@ export default function Coupons() {
                         </button>
                       </div>
                       {coupon.description && (
-                        <p className="text-xs text-purple-400 mt-1 max-w-[200px] truncate">
+                        <p className="text-xs text-purple-400 mt-1 max-w-50 truncate">
                           {coupon.description}
                         </p>
                       )}

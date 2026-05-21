@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import validator from 'validator';
 import jwt from 'jsonwebtoken';
 import { recordLoginDevice } from '../../utils/recordLoginDevice.js';
+import { notifyNewCustomer } from '../../utils/notificationHelper.js';
 
 // Signup user
 export const signupUser = async (req, res) => {
@@ -47,10 +48,17 @@ export const signupUser = async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
 
         // Create the user
-        await User.create({
+        const newUser = await User.create({
             name: name.trim(),
             phonenumber,
             password: hashedPassword
+        });
+
+        // Trigger notification for new customer
+        await notifyNewCustomer({
+            _id: newUser._id,
+            name: newUser.name,
+            phonenumber: newUser.phonenumber
         });
 
         res.json({ message: 'User created successfully !' });

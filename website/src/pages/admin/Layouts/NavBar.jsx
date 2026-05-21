@@ -1,7 +1,10 @@
 
-import { Search, Bell, Moon, Sun, Menu, Wallet, ChevronDown, PanelLeft } from 'lucide-react';
+import { Search, Earth, Menu, Wallet, ChevronDown, PanelLeft } from 'lucide-react';
+import NotificationDropdown from './NotificationDropdown.jsx';
+import { useNavigate } from 'react-router';
 
-export default function Navbar({ sidebarCollapsed, setSidebarCollapsed, setSidebarOpen, searchQuery, setSearchQuery, notifications, darkMode, setDarkMode }) {
+export default function Navbar({ sidebarCollapsed, setSidebarCollapsed, setSidebarOpen, searchQuery, setSearchQuery }) {
+  const navigate = useNavigate();
   return (
     <header className="sticky top-0 z-30 bg-[#4a154a]/80 backdrop-blur-xl border-b border-white/10">
       <div className="flex items-center justify-between px-6 py-4">
@@ -36,23 +39,19 @@ export default function Navbar({ sidebarCollapsed, setSidebarCollapsed, setSideb
             <span className="text-sm font-bold text-white">৳ 2,15,000</span>
           </div>
 
-          <button onClick={() => setDarkMode(!darkMode)} className="p-2.5 rounded-2xl hover:bg-white/10 text-white/60 hover:text-white transition-colors">
-            {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+          <button onClick={() => navigate("/")} className="p-2.5 rounded-2xl hover:bg-white/10 text-white/60 hover:text-white transition-colors">
+             <Earth size={20} />
           </button>
 
-          <button className="relative p-2.5 rounded-2xl hover:bg-white/10 text-white/60 hover:text-white transition-colors">
-            <Bell size={20} />
-            {notifications > 0 && (
-              <span className="absolute top-1 right-1 w-5 h-5 bg-orange-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-[#4a154a]">
-                {notifications}
-              </span>
-            )}
-          </button>
+          <NotificationDropdown />
 
           <div className="flex items-center gap-3 pl-3 border-l border-white/10">
-            <div className="w-10 h-10 rounded-2xl bg-linear-to-br from-orange-500 to-orange-400 flex items-center justify-center text-white font-bold text-sm shadow-md cursor-pointer">
+            <button 
+              onClick={() => navigate('/admin/profile')}
+              className="w-10 h-10 rounded-2xl bg-linear-to-br from-orange-500 to-orange-400 flex items-center justify-center text-white font-bold text-sm shadow-md cursor-pointer hover:from-orange-600 hover:to-orange-500 transition-all"
+            >
               AD
-            </div>
+            </button>
             <ChevronDown size={16} className="text-white/50 hidden sm:block" />
           </div>
         </div>

@@ -26,7 +26,7 @@ const sidebarConfig = [
   { icon: Ticket, label: 'Coupons', path: '/admin/coupons', badge: '12' },
   { icon: Image, label: 'Campaign Banner', path: '/admin/campaign-banner' },
   { icon: Star, label: 'Reviews', path: '/admin/reviews', badge: '24' },
-  { icon: Truck, label: 'Delivery System', path: '/admin/delivery' },
+  { icon: Truck, label: 'Courier API ', path: '/admin/delivery' },
   { icon: BarChart3, label: 'Reports', path: '/admin/reports' },
   { icon: Settings, label: 'Settings', path: '/admin/settings' },
 ];

@@ -8,7 +8,6 @@ export default function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
-  const [notifications] = useState(5);
   const [searchQuery, setSearchQuery] = useState('');
 
   return (
@@ -27,7 +26,6 @@ export default function AdminLayout() {
           setSidebarOpen={setSidebarOpen}
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
-          notifications={notifications}
           darkMode={darkMode}
           setDarkMode={setDarkMode}
         />

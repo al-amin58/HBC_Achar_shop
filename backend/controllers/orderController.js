@@ -2,6 +2,8 @@ import Cart from '../models/Cart.js';
 import Order from '../models/Order.js';
 import User from '../models/User.js';
 import { incrementCouponUsage } from './backend/couponController.js';
+import { formatCustomerOrder } from '../utils/orderFormatters.js';
+import { notifyNewOrder } from '../utils/notificationHelper.js';
 
 const makeOrderNumber = () => {
   const d = new Date();
@@ -12,32 +14,7 @@ const makeOrderNumber = () => {
   return `ACH-${y}${m}${day}-${rand}`;
 };
 
-const formatOrder = (order) => ({
-  id: String(order._id),
-  orderNumber: order.orderNumber,
-  items: (order.items || []).map((it) => ({
-    id: String(it._id),
-    productId: it.productId,
-    name: it.name,
-    image: it.image,
-    variation: it.variationLabel,
-    variationLabel: it.variationLabel,
-    price: it.price,
-    oldPrice: it.oldPrice,
-    isFlashSale: it.isFlashSale,
-    qty: it.qty,
-    total: it.lineTotal,
-  })),
-  customer: order.customer,
-  shipping: order.shipping,
-  pricing: order.pricing,
-  payment: order.payment,
-  monthlySubscription: Boolean(order.monthlySubscription),
-  orderNote: order.orderNote || '',
-  status: order.status,
-  createdAt: order.createdAt,
-  updatedAt: order.updatedAt,
-});
+const formatOrder = (order) => formatCustomerOrder(order);
 
 const mapCartLine = (item) => {
   const price = Number(item.price) || 0;
@@ -72,6 +49,8 @@ export const createOrder = async (req, res) => {
       walletUsed = 0,
       coinDiscount = 0,
       monthlySubscription = false,
+      isLandingPage = false,
+      transactionId = '',
     } = req.body;
 
     if (!customer?.fullName || !customer?.phone || !customer?.address) {
@@ -113,6 +92,8 @@ export const createOrder = async (req, res) => {
     const wallet = Math.max(0, Number(walletUsed) || 0);
     const coins = Math.max(0, Number(coinDiscount) || 0);
     const total = Math.max(0, subtotal + delivery - disc - wallet - coins);
+    const isFlashSale = orderItems.some((i) => i.isFlashSale);
+    const userDoc = await User.findById(userId).select('totalOrders totalSpend').lean();
 
     const fullAddress = [
       customer.address,
@@ -151,10 +132,39 @@ export const createOrder = async (req, res) => {
       },
       payment: {
         method: paymentMethod,
-        status: 'pending',
+        status: paymentMethod === 'cod' ? 'pending' : 'paid',
         paid: paymentMethod === 'cod' ? 0 : total,
         due: paymentMethod === 'cod' ? total : 0,
       },
+      delivery: {
+        status: 'pending',
+        courier: '',
+        trackingId: '',
+      },
+      source: {
+        isFlashSale,
+        isLandingPage: Boolean(isLandingPage),
+      },
+      tags: {
+        isVIP: (userDoc?.totalSpend || 0) >= 5000,
+        isRepeat: (userDoc?.totalOrders || 0) >= 1,
+      },
+      fraud: {
+        score: paymentMethod === 'cod' && total > 3000 ? 25 : 10,
+        isFraudulent: false,
+        ipAddress: req.ip || '',
+        device: req.headers['user-agent'] || '',
+      },
+      adminNote: '',
+      transactionId: transactionId || '',
+      statusHistory: [
+        {
+          orderStatus: 'pending',
+          deliveryStatus: 'pending',
+          note: 'Order placed',
+          at: new Date(),
+        },
+      ],
       monthlySubscription: monthlyFlag,
       orderNote: orderNote || '',
       status: 'pending',
@@ -174,6 +184,14 @@ export const createOrder = async (req, res) => {
     if (couponCode) {
       await incrementCouponUsage(couponCode);
     }
+
+    // Trigger notification for new order
+    await notifyNewOrder({
+      _id: order._id,
+      orderId: order.orderNumber,
+      totalAmount: order.pricing.total,
+      customerName: order.customer.fullName
+    });
 
     return res.status(201).json(formatOrder(order));
   } catch (error) {

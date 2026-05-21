@@ -36,6 +36,11 @@ import Setting from "./pages/admin/Setting.jsx";
 import Orders from "./pages/admin/Orders.jsx";
 import Campaignbanner from "./pages/admin/Campaignbanner.jsx";
 import Coupons from "./pages/admin/coupons.jsx";
+import Delivery from "./pages/admin/Deliverysystem.jsx";
+import Profile from "./pages/admin/Profile.jsx";
+
+// socket context
+import { SocketProvider } from "./context/SocketContext.jsx";
 
 
 const router = createBrowserRouter([
@@ -116,6 +121,8 @@ const router = createBrowserRouter([
           {  path: "flash-sale", element:<Navigate to="/admin/settings?tab=flash" replace />},
           {  path: "campaign-banner", element:<Campaignbanner/>},
           {  path: "coupons", element:<Coupons/>},
+          {  path: "delivery", element:<Delivery/>},
+          {  path: "profile", element:<Profile/>},
         ]
       },
     ],
@@ -123,5 +130,9 @@ const router = createBrowserRouter([
 ]);
 
 export default function App() {
-  return <RouterProvider router={router} />;
+  return (
+    <SocketProvider>
+      <RouterProvider router={router} />
+    </SocketProvider>
+  );
 }

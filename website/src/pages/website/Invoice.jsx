@@ -3,6 +3,7 @@ import { useRef, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import api from '../../api/axios';
+import { mapAdminOrderToInvoiceOrder } from '../../utils/invoiceHelpers';
 
 const formatBnDate = (d) =>
   d
@@ -91,6 +92,8 @@ export default function InvoicePage() {
   const [error, setError] = useState('');
 
   const orderId = searchParams.get('id');
+  const isAdmin = searchParams.get('admin') === '1';
+  const autoprint = searchParams.get('print') === '1';
 
   // Handle missing orderId without setState in effect
   const initialError = !orderId ? t('invoice.noOrderId') : '';
@@ -101,12 +104,19 @@ export default function InvoicePage() {
     let cancelled = false;
     const load = async () => {
       try {
-        const [orderRes, settingsRes] = await Promise.all([
-          api.get(`/orders/${orderId}`),
-          api.get('/settings/public'),
-        ]);
+        const settingsRes = await api.get('/settings/public');
+        let orderPayload;
+
+        if (isAdmin) {
+          const orderRes = await api.get(`/admin/orders/${orderId}`);
+          orderPayload = mapAdminOrderToInvoiceOrder(orderRes.data.order);
+        } else {
+          const orderRes = await api.get(`/orders/${orderId}`);
+          orderPayload = orderRes.data;
+        }
+
         if (!cancelled) {
-          setInvoiceData(buildInvoiceView(orderRes.data, settingsRes.data, t));
+          setInvoiceData(buildInvoiceView(orderPayload, settingsRes.data, t));
         }
       } catch (err) {
         if (!cancelled) {
@@ -120,7 +130,13 @@ export default function InvoicePage() {
     };
     void load();
     return () => { cancelled = true; };
-  }, [orderId]);
+  }, [orderId, isAdmin, t]);
+
+  useEffect(() => {
+    if (!autoprint || !invoiceData || loading) return;
+    const timer = setTimeout(() => window.print(), 700);
+    return () => clearTimeout(timer);
+  }, [autoprint, invoiceData, loading]);
 
   // Use initial error state when orderId is missing
   const displayError = initialError || error;
@@ -181,13 +197,25 @@ export default function InvoicePage() {
           </div>
           
           <div className="flex items-center gap-2">
+            {isAdmin ? (
+              <button
+                type="button"
+                onClick={() => window.close()}
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                ✕ বন্ধ করুন
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => navigate('/thank-you')}
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                ← পেছনে
+              </button>
+            )}
             <button
-              onClick={() => navigate('/thank-you')}
-              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              ← পেছনে
-            </button>
-            <button
+              type="button"
               onClick={handlePrint}
               className="flex items-center gap-2 px-4 py-2 bg-white border border-orange-200 text-orange-600 rounded-lg hover:bg-orange-50 transition-all text-sm font-medium shadow-sm"
             >
@@ -452,26 +480,31 @@ export default function InvoicePage() {
         </div>
 
         {/* Bottom Actions - Hidden when printing */}
-        <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3 print:hidden pb-8">
-          <button
-            onClick={() => navigate('/')}
-            className="px-6 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-all font-medium shadow-sm"
-          >
-            🏠 হোমপেজ
-          </button>
-          <button
-            onClick={() => navigate('/orders')}
-            className="px-6 py-3 bg-white border border-orange-200 text-orange-600 rounded-xl hover:bg-orange-50 transition-all font-medium shadow-sm"
-          >
-            📦 আমার অর্ডার
-          </button>
-          <button
-            onClick={handlePrint}
-            className="px-6 py-3 bg-linear-to-r from-orange-500 to-green-500 text-white rounded-xl hover:from-orange-600 hover:to-green-600 transition-all font-medium shadow-md"
-          >
-            🖨️ প্রিন্ট / পিডিএফ সেভ
-          </button>
-        </div>
+        {!isAdmin && (
+          <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3 print:hidden pb-8">
+            <button
+              type="button"
+              onClick={() => navigate('/')}
+              className="px-6 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-all font-medium shadow-sm"
+            >
+              🏠 হোমপেজ
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/orders')}
+              className="px-6 py-3 bg-white border border-orange-200 text-orange-600 rounded-xl hover:bg-orange-50 transition-all font-medium shadow-sm"
+            >
+              📦 আমার অর্ডার
+            </button>
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="px-6 py-3 bg-linear-to-r from-orange-500 to-green-500 text-white rounded-xl hover:from-orange-600 hover:to-green-600 transition-all font-medium shadow-md"
+            >
+              🖨️ প্রিন্ট / পিডিএফ সেভ
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Print Styles */}

@@ -8,6 +8,8 @@ dotenv.config();
 // ── admin এর email আর password ──
 const ADMIN_EMAIL    = 'admin@admin.com';
 const ADMIN_PASSWORD = '123456789';
+// const ROLE = 'admin';
+const ADMIN_NAME     = 'Admin User';
 
 const seed = async () => {
   try {
@@ -23,7 +25,11 @@ const seed = async () => {
 
     // password hash করে 
     const hashed = await bcrypt.hash(ADMIN_PASSWORD, 10);
-    await Admin.create({ email: ADMIN_EMAIL, password: hashed });
+    await Admin.create({ 
+      name: ADMIN_NAME,
+      email: ADMIN_EMAIL, 
+      password: hashed 
+    });
     console.log('Admin created successfully!');
     process.exit(0);
   } catch (err) {

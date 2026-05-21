@@ -14,6 +14,8 @@ const ADMIN_ROUTE_PREFIXES = [
     '/settings',
     '/coupons',
     '/auth/admin',
+    '/admin/orders',
+    '/admin/couriers',
 ];
 
 /** Match admin API paths whether config.url is relative, absolute, or already merged with baseURL */
